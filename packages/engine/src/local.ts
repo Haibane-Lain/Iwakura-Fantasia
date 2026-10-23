@@ -344,7 +344,10 @@ export function moveLocalParty(state: GameState, to: Hex): LocalMoveResult | nul
   if (!route) return null;
   const minutes = Math.max(1, route.path.length * 2);
   const player = state.entities.player;
-  const encounter = localEncounterAt(state, to);
+  const encounter = local.map.encounters.find(
+    (entry) =>
+      !local.encounterFlags[entry.id] && route.path.some((step) => distance(entry.hex, step) <= entry.radius),
+  );
   const encounterFlags = encounter ? { ...local.encounterFlags, [encounter.id]: true } : local.encounterFlags;
   const entities = player
     ? {

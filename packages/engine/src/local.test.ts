@@ -190,6 +190,7 @@ describe("dialogues, quests, and trade", () => {
     const ledger = state.local!.map.interactables.find((entry) => entry.id === "core:crypt_ledger")!;
     const moved = moveLocalParty(state, ledger.hex);
     expect(moved).not.toBeNull();
+    expect(moved!.encounter?.id).toBe("core:crypt_shades");
     const interacted = interactLocal(moved!.state, "core:crypt_ledger");
     expect(interacted).not.toBeNull();
     expect(interacted!.state.quests["core:the_stopped_mill"]?.objectives[1]?.complete).toBe(true);

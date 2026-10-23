@@ -1,6 +1,6 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** M3 towns, NPCs, and quests complete; M4 battle next
+**Status:** M3 complete; M4 battle vertical slice in progress
 **Last updated:** 2026-10-24
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
@@ -969,17 +969,26 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Dungeon encounter triggers set a persistent flag and show a warning; tactical resolution is M4.
 - Not yet implemented: enterable building interiors, minute-granular schedules, NPC pathing, crimes/reputation, branching quests, and quest templates.
 
-### M4 — Battle
+### M4 — Battle (vertical slice)
 
-- [ ] Battle map generation from world hex.
-- [ ] Initiative, rounds, action economy, movement, attacks.
-- [ ] Abilities, conditions, cover, elevation, LOS.
-- [ ] Enemy utility AI.
+- [x] Battle map generation from the current local map or world terrain.
+- [x] Initiative, rounds, turn order, movement, attacks, focus costs, and enemy turns.
+- [~] Abilities, conditions, cover, elevation, LOS. Abilities, shield condition, and LOS are implemented; cover/elevation are deferred.
+- [x] Enemy utility AI: close distance and attack adjacent targets.
 - [ ] Companion combat AI + player override.
-- [ ] Victory/defeat/retreat, rewards, consequences.
-- [ ] Battle UI, combat log, animations.
+- [x] Victory/defeat/retreat, basic rewards, consequences, and saved battle state.
+- [x] Battle UI and combat log. Animations and damage previews are deferred.
 
-**Exit:** fight two encounters with abilities and retreat from one.
+**Exit:** fight two encounters with abilities and retreat from one. Partially achieved: dungeon battle, abilities, enemy turns, retreat, and victory rewards are covered by tests; the E2E fights and retreats once.
+
+**M4 notes:**
+- Battle maps reuse the local hex renderer. Dungeon fights use the current local map with building/exit/interactable markers stripped; road fights generate a small arena from the current world terrain.
+- Turn order is d20 + Dexterity or enemy initiative bonus. The active unit has movement equal to speed and one action. Enemy turns are resolved explicitly from the UI.
+- Player attacks use proficiency + Strength, equipped weapon damage, critical hits, and AC. Enemies use authored attack bonus, damage dice, and range.
+- Implemented abilities: Power Strike, Sneak Attack, Firebolt (range + LOS), Shield (+5 AC condition), Second Wind, and Cunning Action.
+- Enemy AI closes distance and attacks when adjacent; it does not use cover, flanking, or abilities yet.
+- Victory grants enemy gold; defeat costs 10 gp and leaves the party at 1 hp; retreat returns to the previous local/world state. Battle state persists in the campaign save.
+- Not yet implemented: companion turns, cover, elevation, full condition durations, attack animations, damage previews, and a second battle in the E2E.
 
 ### M5 — AI NPCs
 
@@ -1132,7 +1141,8 @@ Create these as decisions are implemented:
 - M1: implemented; procedural and handcrafted worlds generate, validate, render, travel, and save.
 - M2: implemented; characters are built, derived, equipped, inspected, rolled, and saved with the campaign.
 - M3: implemented; towns, NPC schedules, authored dialogue, merchants, quests, and the crypt are playable and saved.
-- Next: **M4 — Battle**.
+- M4: vertical slice implemented; initiative, movement, attacks, abilities, enemy AI, retreat, victory rewards, and saved battles work.
+- Next: **finish M4 — Battle** (cover, elevation, companions, animations, second E2E battle), then M5.
 - Blockers: none.
 - Resolved: Electron 45 bundles Node 24.22, so `node:sqlite` works and `better-sqlite3` is unnecessary.
 - Resolved: Pixi 8 works under the strict CSP by importing `pixi.js/unsafe-eval`, which installs the non-eval polyfills.

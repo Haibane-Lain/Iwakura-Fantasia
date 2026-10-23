@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** M3 towns, NPCs, and quests complete. M4 (battle) is next.
+**Status:** M3 complete. M4 battle vertical slice in progress (initiative, movement, attacks, abilities, enemy AI, retreat, rewards).
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md)
 
@@ -36,7 +36,8 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Merchant trade** with per-campaign stock, buy/sell validation, gold, inventory, and equipped-item protection.
 - **Quest journal and state machine**: accept, reveal targets on the map, progress reach/interact objectives, turn in for gold and items.
 - **The Mill That Stopped** and **The Greywatch Light** authored quests, plus a crypt ledger, dungeon encounter trigger, inn rest, and wait controls.
-- **Tests**: Vitest for hex/RNG/worldgen/character/content/local maps/NPC schedules/dialogue/quests/trade/AI prompt/server routes (68 tests), and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, local save/continue, keystore round-trip, and the missing-key error path.
+- **Battle vertical slice**: initiative order, rounds, movement, melee attacks, class abilities, focus costs, shield/condition handling, simple enemy utility AI, victory/defeat/retreat, gold rewards, and a saved battle state. Encounter prompts start battles from the road or a dungeon.
+- **Tests**: Vitest for hex/RNG/worldgen/character/content/local maps/NPC schedules/dialogue/quests/trade/battle/AI prompt/server routes (75 tests), and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, keystore round-trip, and the missing-key error path.
 - **Packaged Windows build** via electron-builder (`--dir` smoke test): about 4 MB `app.asar`, no native modules.
 
 ![AI Lab](docs/images/ai-lab.png)
@@ -61,6 +62,8 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 ![Crypt ledger recovered](docs/images/dungeon-ledger.png)
 
+![Tactical battle](docs/images/battle.png)
+
 ---
 
 ## Quick start
@@ -80,8 +83,9 @@ Then:
 4. Begin the chronicle. Drag to pan, scroll to zoom, and click a hex to travel. The clock, fog, discoveries, and save update automatically.
 5. Walk onto Redford or Millbrook and use **Enter** to switch to the local hex map. Talk to people, trade, rest, wait, and open the **Journal**.
 6. Accept Hessa's quest in Redford, travel to the Old Mill Crypt, recover the ledger, and return to her. The quest reveals the crypt on the world map.
-7. Open the **Character** sheet to inspect stats, equipment, and roll skill checks.
-8. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab or the dialogue AI hook.
+7. In the crypt, walk into the shade encounter. The ambush panel offers **Fight** or **Avoid**. A battle uses initiative, movement, attacks, abilities, and retreat.
+8. Open the **Character** sheet to inspect stats, equipment, and roll skill checks.
+9. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab or the dialogue AI hook.
 
 Without a key, the world and saves still work. AI actions return a clear configuration error instead of blocking the UI.
 
@@ -182,7 +186,8 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Current limitations
 
-- Battle maps, tactical combat, companions, and romance are planned for M4–M6. Travel and dungeon encounters currently log a warning stub.
+- Battle is a playable vertical slice: initiative, movement, attacks, several class abilities, shield/LOS handling, enemy move-and-attack AI, victory/defeat/retreat, rewards, and saved state. Cover, elevation, full conditions, companion turns, animations, and the complete action economy remain.
+- Battle maps reuse the local hex renderer. Dungeon battles use the current local map; road battles generate an arena from the current terrain.
 - Character progression currently stops at level 1. Subclasses, feats, level-up UI, and level 5+ content are not implemented yet.
 - Standard array is assigned through six selects; rolled stats are auto-assigned by class priority. Drag-and-drop stat assignment and manual rolled assignment are deferred.
 - Class skill choices exclude skills already granted by background or ancestry. There are no expertise or tool proficiencies yet.
@@ -201,10 +206,10 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ---
 
-## Next milestone: M4 — Battle
+## Next milestone: finish M4 — Battle
 
-- Battle maps generated from the current world hex or dungeon encounter.
-- Initiative, rounds, action economy, movement, attacks, and cover/LOS.
-- Player abilities, conditions, enemy utility AI, and companion turns.
-- Victory, defeat, retreat, rewards, and consequences.
-- Battle UI and combat log, with encounter triggers wired from travel and dungeons.
+- Cover, elevation, line-of-sight UI, and the full condition/action economy.
+- Companion combat turns and player override.
+- Battle animations, damage previews, and richer enemy tactics.
+- A second battle and a full victory path in the E2E.
+- Then M5: structured AI NPC turns and intent validation.

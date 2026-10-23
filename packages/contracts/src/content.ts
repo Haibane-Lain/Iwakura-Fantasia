@@ -101,3 +101,21 @@ export const ItemSchema = z.object({
   stats: z.record(z.string(), z.unknown()).default({}),
 });
 export type Item = z.infer<typeof ItemSchema>;
+
+export const EnemyDefinitionSchema = z.object({
+  id: ContentIdSchema,
+  name: z.string().min(1),
+  description: z.string().min(1),
+  hp: z.number().int().min(1).max(200),
+  ac: z.number().int().min(1).max(30),
+  speed: z.number().int().min(1).max(12).default(6),
+  attackBonus: z.number().int().min(-5).max(20).default(2),
+  damageDice: z.string().min(1).max(20).default("1d6"),
+  damageBonus: z.number().int().min(0).max(20).default(0),
+  range: z.number().int().min(1).max(12).default(1),
+  initiativeBonus: z.number().int().min(-5).max(10).default(0),
+  gold: z.number().int().min(0).max(500).default(0),
+  palette: z.string().min(1).max(40).default("ember"),
+  tags: z.array(z.string()).default([]),
+});
+export type EnemyDefinition = z.infer<typeof EnemyDefinitionSchema>;

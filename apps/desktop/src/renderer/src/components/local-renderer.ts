@@ -351,7 +351,10 @@ export class LocalRenderer {
     const initialScale = Math.max(0.7, Math.min(fitScale, 1.8));
     this.minScale = Math.max(0.35, fitScale * 0.8);
     this.maxScale = Math.max(2.4, initialScale * 3);
-    const center = hexToPixel(this.partyHex, HEX_SIZE);
+    const center = hexToPixel(
+      offsetToAxial({ col: Math.floor(this.map.width / 2), row: Math.floor(this.map.height / 2) }),
+      HEX_SIZE,
+    );
     this.camera.scale.set(initialScale);
     this.camera.position.set(
       this.app.screen.width / 2 - center.x * initialScale,

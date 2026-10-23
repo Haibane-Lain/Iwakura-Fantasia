@@ -1,12 +1,14 @@
 import { getTerrain } from "@iwakura/content";
 import type { Hex } from "@iwakura/contracts";
 import {
+  battleEnemiesForEncounter,
   enterLocalMap,
   formatClock,
   moveParty,
   nearbyPois,
   pathBetween,
   poiAt,
+  startBattle,
   terrainAt,
   timeOfDay,
 } from "@iwakura/engine";
@@ -23,6 +25,7 @@ import {
   Menu,
   Save,
   Sparkles,
+  Swords,
   UserRound,
   X,
 } from "lucide-react";
@@ -32,6 +35,7 @@ import { QuestJournal } from "../components/QuestJournal";
 import { cn, Panel, SectionLabel, StatusDot } from "../components/ui";
 import { WorldCanvas } from "../components/WorldCanvas";
 import { useAppStore } from "../state/useAppStore";
+import { BattleScreen } from "./BattleScreen";
 import { LocalScreen } from "./LocalScreen";
 
 function kindLabel(kind: string): string {
@@ -49,6 +53,11 @@ export function WorldScreen() {
   const [toast, setToast] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [questOpen, setQuestOpen] = useState(false);
+  const [pendingEncounter, setPendingEncounter] = useState<{
+    id: string;
+    name: string;
+    description: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!campaign) setScreen("campaign");
@@ -75,6 +84,7 @@ export function WorldScreen() {
   }, [campaign]);
 
   if (!campaign) return null;
+  if (campaign.battle) return <BattleScreen />;
   if (campaign.local) return <LocalScreen />;
 
   const world = campaign.world;
@@ -92,9 +102,10 @@ export function WorldScreen() {
     setSelectedHex(hex);
     void saveCampaign(result.state);
     if (result.encounter) {
-      setToast({
-        tone: "warn",
-        text: "Something stirs on the road. Encounter stubs resolve when battle maps arrive in M4.",
+      setPendingEncounter({
+        id: "core:road_ambush",
+        name: "Road ambush",
+        description: "Figures move in the brush beside the road. Steel catches the last of the light.",
       });
     } else {
       setToast({
@@ -111,6 +122,17 @@ export function WorldScreen() {
       return;
     }
     void saveCampaign(result.state);
+  };
+
+  const fightRoadEncounter = () => {
+    if (!pendingEncounter) return;
+    const next = startBattle(campaign, {
+      enemyIds: battleEnemiesForEncounter(pendingEncounter.id),
+      source: "travel",
+    });
+    if (!next) return;
+    setPendingEncounter(null);
+    void saveCampaign(next);
   };
 
   const saveLabel =
@@ -236,6 +258,36 @@ export function WorldScreen() {
       </div>
 
       <aside className="absolute bottom-4 right-4 top-[76px] flex w-[332px] flex-col gap-3 overflow-y-auto pr-1">
+        {pendingEncounter ? (
+          <Panel className="border-gold/45 p-4">
+            <div className="flex items-center gap-2">
+              <Swords className="size-4 text-gold" />
+              <SectionLabel>Ambush</SectionLabel>
+            </div>
+            <div className="mt-1 font-display text-lg text-parchment">{pendingEncounter.name}</div>
+            <p className="mt-1 text-[10px] leading-5 text-muted">{pendingEncounter.description}</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                className="btn btn-primary flex-1"
+                onClick={fightRoadEncounter}
+                aria-label={`Fight ${pendingEncounter.name}`}
+              >
+                <Swords className="size-3.5" />
+                Fight
+              </button>
+              <button
+                type="button"
+                className="btn flex-1"
+                onClick={() => setPendingEncounter(null)}
+                aria-label={`Avoid ${pendingEncounter.name}`}
+              >
+                <Footprints className="size-3.5" />
+                Avoid
+              </button>
+            </div>
+          </Panel>
+        ) : null}
         <Panel className="p-4">
           <div className="flex items-center justify-between">
             <SectionLabel>Selected hex</SectionLabel>

@@ -344,6 +344,27 @@ export const BattleParticipantSchema = z.object({
   initiative: z.number().int(),
   team: z.enum(["party", "enemy", "neutral"]),
 });
+export const BattleUnitSchema = z.object({
+  id: z.string().min(1),
+  entityId: z.string().optional(),
+  name: z.string().min(1),
+  team: z.enum(["party", "enemy", "neutral"]),
+  kind: z.enum(["player", "enemy"]).default("enemy"),
+  hp: z.number().int().min(0),
+  maxHp: z.number().int().min(1),
+  ac: z.number().int().min(1).max(40),
+  speed: z.number().int().min(1).max(20).default(6),
+  initiative: z.number().int(),
+  position: HexSchema,
+  moved: z.number().int().min(0).default(0),
+  actionUsed: z.boolean().default(false),
+  bonusUsed: z.boolean().default(false),
+  defeated: z.boolean().default(false),
+  palette: z.string().optional(),
+  conditions: z.array(z.string()).default([]),
+});
+export type BattleUnit = z.infer<typeof BattleUnitSchema>;
+
 export const BattleStateSchema = z.object({
   id: z.string().min(1),
   arena: z.object({
@@ -351,6 +372,12 @@ export const BattleStateSchema = z.object({
     height: z.number().int().positive(),
     terrain: z.array(z.string()).default([]),
   }),
+  map: LocalMapSchema.optional(),
+  units: z.array(BattleUnitSchema).default([]),
+  activeUnitId: z.string().optional(),
+  status: z.enum(["active", "victory", "defeat", "retreated"]).default("active"),
+  source: z.enum(["travel", "dungeon", "scripted"]).default("travel"),
+  rewards: z.object({ gold: z.number().int().min(0).default(0) }).default({ gold: 0 }),
   round: z.number().int().min(1).default(1),
   turnIndex: z.number().int().min(0).default(0),
   order: z.array(BattleParticipantSchema).default([]),

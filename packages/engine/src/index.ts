@@ -1,3 +1,4 @@
+export * from "./battle.js";
 export * from "./character.js";
 export * from "./grid.js";
 export * from "./hex.js";

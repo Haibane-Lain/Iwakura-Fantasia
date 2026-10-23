@@ -116,6 +116,24 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
     await expect(window.getByRole("button", { name: "Examine Mill ledger" }).first()).toBeVisible({
       timeout: 10_000,
     });
+
+    // The dungeon encounter offers a tactical battle. Fight briefly, then retreat.
+    await window.getByRole("button", { name: /Fight Shades in the undercroft/ }).click();
+    await expect(window.getByText("Battle").first()).toBeVisible({ timeout: 10_000 });
+    for (let turn = 0; turn < 4; turn += 1) {
+      const resolve = window.getByRole("button", { name: /Resolve / });
+      if ((await resolve.count()) === 0) break;
+      await resolve.first().click();
+      await window.waitForTimeout(100);
+    }
+    await window.getByRole("button", { name: "Retreat" }).click();
+    await expect(window.getByText("retreated").first()).toBeVisible({ timeout: 10_000 });
+    await window.getByRole("button", { name: "Return to the road" }).click();
+    await expect(window.getByText("Points of interest").first()).toBeVisible({ timeout: 10_000 });
+
+    await expect(window.getByRole("button", { name: "Examine Mill ledger" }).first()).toBeVisible({
+      timeout: 10_000,
+    });
     await window.getByRole("button", { name: "Examine Mill ledger" }).first().click();
     await expect(window.getByText(/You take the Mill Ledger/).first()).toBeVisible();
     await window.getByRole("button", { name: "Journal" }).click();

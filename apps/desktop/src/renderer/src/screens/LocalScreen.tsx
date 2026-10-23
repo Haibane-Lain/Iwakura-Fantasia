@@ -1,7 +1,8 @@
 import { getNpcDefinition } from "@iwakura/content";
-import type { Hex, LocalBuilding } from "@iwakura/contracts";
+import type { Hex, LocalBuilding, LocalEncounter } from "@iwakura/contracts";
 import {
   advanceTime,
+  battleEnemiesForEncounter,
   ensureShop,
   formatClock,
   interactLocal,
@@ -17,6 +18,7 @@ import {
   npcAtLocalHex,
   npcsInLocalMap,
   restAtInn,
+  startBattle,
   startDialogue,
   timeOfDay,
 } from "@iwakura/engine";
@@ -35,6 +37,7 @@ import {
   Search,
   ShoppingBag,
   Sparkles,
+  Swords,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -65,6 +68,7 @@ export function LocalScreen() {
   const [shopId, setShopId] = useState<string | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [pendingEncounter, setPendingEncounter] = useState<LocalEncounter | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -124,10 +128,8 @@ export function LocalScreen() {
     setSelectedHex(hex);
     persist(result.state);
     if (result.encounter) {
-      notify(
-        `${result.encounter.name}. ${result.encounter.description} Combat arrives in M4; the engine has recorded the encounter.`,
-        "warn",
-      );
+      setPendingEncounter(result.encounter);
+      notify(`${result.encounter.name} — decide whether to fight or avoid.`, "warn");
     }
   };
 
@@ -166,6 +168,20 @@ export function LocalScreen() {
   const wait = (hours: number) => {
     persist(advanceTime(campaign, hours * 60));
     notify(`You wait ${hours} hour${hours === 1 ? "" : "s"}. The town shifts around you.`);
+  };
+
+  const fight = () => {
+    if (!pendingEncounter) return;
+    const next = startBattle(campaign, {
+      enemyIds: battleEnemiesForEncounter(pendingEncounter.id),
+      source: "dungeon",
+    });
+    if (!next) {
+      notify("The enemy is already upon you.", "warn");
+      return;
+    }
+    setPendingEncounter(null);
+    persist(next);
   };
 
   const extra = hoverHex ? localTileInfo(map, hoverHex) : null;
@@ -293,6 +309,36 @@ export function LocalScreen() {
       </div>
 
       <aside className="absolute bottom-4 right-4 top-[76px] flex w-[344px] flex-col gap-3 overflow-y-auto pr-1">
+        {pendingEncounter ? (
+          <Panel className="border-gold/45 p-4">
+            <div className="flex items-center gap-2">
+              <Swords className="size-4 text-gold" />
+              <SectionLabel>Ambush</SectionLabel>
+            </div>
+            <div className="mt-1 font-display text-lg text-parchment">{pendingEncounter.name}</div>
+            <p className="mt-1 text-[10px] leading-5 text-muted">{pendingEncounter.description}</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                className="btn btn-primary flex-1"
+                onClick={fight}
+                aria-label={`Fight ${pendingEncounter.name}`}
+              >
+                <Swords className="size-3.5" />
+                Fight
+              </button>
+              <button
+                type="button"
+                className="btn flex-1"
+                onClick={() => setPendingEncounter(null)}
+                aria-label={`Avoid ${pendingEncounter.name}`}
+              >
+                <Footprints className="size-3.5" />
+                Avoid
+              </button>
+            </div>
+          </Panel>
+        ) : null}
         <Panel className="p-4">
           <div className="flex items-center justify-between">
             <SectionLabel>Location</SectionLabel>

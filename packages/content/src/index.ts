@@ -1,4 +1,11 @@
-import type { Ability, Ancestry, Background, CharacterClass, Item } from "@iwakura/contracts";
+import type {
+  Ability,
+  Ancestry,
+  Background,
+  CharacterClass,
+  EnemyDefinition,
+  Item,
+} from "@iwakura/contracts";
 
 export * from "./appearance.js";
 export * from "./local.js";
@@ -417,6 +424,61 @@ export function getSkill(id: string): (typeof SKILLS)[number] | undefined {
 
 export function getItem(id: string): Item | undefined {
   return ITEMS.find((entry) => entry.id === id);
+}
+
+export const ENEMIES: EnemyDefinition[] = [
+  {
+    id: "core:bandit",
+    name: "Road bandit",
+    description: "A hungry opportunist with a notched blade and a short temper.",
+    hp: 8,
+    ac: 12,
+    speed: 6,
+    attackBonus: 3,
+    damageDice: "1d6",
+    damageBonus: 1,
+    range: 1,
+    initiativeBonus: 1,
+    gold: 7,
+    palette: "ember",
+    tags: ["humanoid", "road"],
+  },
+  {
+    id: "core:wolf",
+    name: "Grey wolf",
+    description: "Lean, patient, and faster than it has any right to be.",
+    hp: 6,
+    ac: 11,
+    speed: 7,
+    attackBonus: 3,
+    damageDice: "1d6",
+    damageBonus: 1,
+    range: 1,
+    initiativeBonus: 2,
+    gold: 0,
+    palette: "ink",
+    tags: ["beast", "road"],
+  },
+  {
+    id: "core:crypt_shade",
+    name: "Crypt shade",
+    description: "A smear of cold intent that remembers being someone.",
+    hp: 5,
+    ac: 10,
+    speed: 5,
+    attackBonus: 2,
+    damageDice: "1d4",
+    damageBonus: 0,
+    range: 1,
+    initiativeBonus: 0,
+    gold: 0,
+    palette: "frost",
+    tags: ["undead", "crypt"],
+  },
+];
+
+export function getEnemy(id: string): EnemyDefinition | undefined {
+  return ENEMIES.find((entry) => entry.id === id);
 }
 
 export const CONTENT = {
