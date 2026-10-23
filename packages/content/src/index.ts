@@ -1,5 +1,8 @@
 import type { Ability, Ancestry, Background, CharacterClass, Item } from "@iwakura/contracts";
 
+export * from "./terrains.js";
+export * from "./worlds.js";
+
 export const CONTENT_VERSION = "0.1.0";
 
 export const SKILLS = [

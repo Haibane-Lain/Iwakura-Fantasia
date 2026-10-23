@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** M0 foundation complete. M1 (hex world) is next.
+**Status:** M1 hex world complete. M2 (character creation) is next.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md)
 
@@ -20,11 +20,20 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **OpenCode Go gateway** with the `x-opencode-session` header, model catalog, streaming turns, token/cost accounting, and clean provider errors.
 - **AI Lab** for exercising the narrator layer: presets, system prompt, temperature, streamed transcript, raw SSE event inspector, and recent-call telemetry.
 - **Settings** for provider credentials, per-role model routing, temperature, monthly budget, content rating, difficulty, and UI scale.
-- **Local server API** with bearer-token auth, health, settings, model catalog, AI calls, and SSE test turns.
-- **Tests**: Vitest for hex/RNG/AI prompt/server routes, and a Playwright Electron smoke test covering navigation, keystore round-trip, and the missing-key error path.
-- **Packaged Windows build** via electron-builder (`--dir` smoke test): 1.8 MB `app.asar`, no native modules.
+- **Local server API** with bearer-token auth, health, settings, model catalog, AI calls, campaign saves, and SSE test turns.
+- **Procedural world generation** in a Web Worker: elevation, climate, moisture, rivers, lakes, biomes, settlements, dungeons, landmarks, and terrain-aware road networks.
+- **World validation report** with hard errors and warnings before a world can be entered.
+- **Handcrafted world packs** with a sample region, Redford Reach, and the same runtime schema as generated worlds.
+- **PixiJS world map** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and click-to-travel.
+- **World time and campaign saves**: travel advances the clock, reveals fog, discovers landmarks, and persists through SQLite.
+- **Tests**: Vitest for hex/RNG/worldgen/AI prompt/server routes, and a Playwright Electron smoke test covering world creation, travel, save/continue, keystore round-trip, and the missing-key error path.
+- **Packaged Windows build** via electron-builder (`--dir` smoke test): 3.8 MB `app.asar`, no native modules.
 
 ![AI Lab](docs/images/ai-lab.png)
+
+![Redford Reach world map](docs/images/world-map.png)
+
+![World generation](docs/images/world-setup.png)
 
 ---
 
@@ -39,11 +48,12 @@ pnpm dev
 
 Then:
 
-1. Open **Settings → OpenCode Go**.
-2. Paste an OpenCode Go API key and choose **Store key**.
-3. Open **AI Lab**, choose a model, and send a turn.
+1. Open **New Campaign**.
+2. Choose **Procedural** or **Handcrafted**, generate a world, inspect the report, and press **Begin chronicle**.
+3. Drag to pan, scroll to zoom, and click a hex to travel. The clock, fog, discoveries, and save update automatically.
+4. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab.
 
-Without a key, the app still runs. AI actions return a clear configuration error instead of blocking the UI.
+Without a key, the world and saves still work. AI actions return a clear configuration error instead of blocking the UI.
 
 ### Development key alternative
 
@@ -102,8 +112,8 @@ The Electron app reads the OS keystore first, then falls back to `OPENCODE_API_K
 | Package | Responsibility |
 |---|---|
 | `packages/contracts` | Zod schemas and TypeScript types for state, commands, events, AI intents, and API payloads. |
-| `packages/engine` | Pure deterministic rules: hex math, A*, LOS, seeded RNG, dice. |
-| `packages/content` | Data-driven ancestries, classes, backgrounds, abilities, items, skills. |
+| `packages/engine` | Pure deterministic rules: hex math, A*, LOS, seeded RNG, dice, world generation, fog, travel. |
+| `packages/content` | Data-driven ancestries, classes, backgrounds, abilities, items, skills, terrains, and world packs. |
 | `packages/ai-kit` | NPC prompt assembly, structured parsing, token estimation. |
 | `apps/server` | Hono API, SQLite repositories, OpenCode Go adapter, AI gateway. |
 | `apps/desktop` | Electron main/preload/renderer shell and the current UI. |
@@ -142,17 +152,22 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Current limitations
 
-- The world map, battle map, character creation, and NPC dialogue pipeline are planned for M1–M5. The current build is the foundation and AI workbench.
+- Character creation, town/dungeon local maps, battle maps, NPC dialogue, quests, and companions are planned for M2–M6.
+- The world map renders terrain in batched PixiJS layers rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
+- The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred to M3.
+- The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.
+- Travel encounters are a stub. A warning toast appears, but battle maps arrive in M4.
+- The handcrafted world currently generates its roads through the same terrain-aware network builder; authored road paths are supported by the schema but not used by the sample pack.
 - `pnpm package` produces an unpacked Windows build; the NSIS installer target is configured but not yet signed or branded with a custom icon.
 - A successful live OpenCode Go turn still needs a valid key; the error path and adapter have been verified with an intentionally invalid key.
 - OpenCode Go is intended for coding-agent traffic. Treat it as a development/personal provider and keep the adapter swappable before shipping.
 
 ---
 
-## Next milestone: M1 — Hex world
+## Next milestone: M2 — Character and content
 
-- Hex math, A*, LOS, rings and ranges (engine primitives exist).
-- Seeded worldgen with the 14 plausibility rules and a world report.
-- Handcrafted world pack schema and sample region.
-- PixiJS world renderer with camera, chunk baking, and fog.
-- Party movement, time, travel encounters, and save/load.
+- Ancestry, class, and background selection.
+- Point buy, standard array, and seeded rolling.
+- Derived stats, skills, inventory, and equipment.
+- Character sheet UI and the first procedural portrait/sigil.
+- Character state integrated with world travel and campaign saves.

@@ -54,6 +54,9 @@ export const PointOfInterestSchema = z.object({
   hex: HexSchema,
   discovered: z.boolean().default(false),
   worldPackId: z.string().optional(),
+  description: z.string().max(2000).default(""),
+  size: z.enum(["hamlet", "village", "town", "city"]).optional(),
+  levelBand: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).optional(),
 });
 export type PointOfInterest = z.infer<typeof PointOfInterestSchema>;
 
@@ -65,13 +68,83 @@ export const WorldStateSchema = z.object({
   seed: z.string().min(1),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
-  /** Row-major terrain IDs. Empty until worldgen has run. */
+  /** Row-major terrain (biome) IDs. Empty until worldgen has run. */
   terrain: z.array(z.string()).default([]),
+  /** Row-major elevation, moisture, and temperature fields in [0, 1]. */
+  elevation: z.array(z.number()).default([]),
+  moisture: z.array(z.number()).default([]),
+  temperature: z.array(z.number()).default([]),
+  /** Row-major overlays. 1 means the hex carries the overlay. */
+  river: z.array(z.number().int().min(0).max(1)).default([]),
+  road: z.array(z.number().int().min(0).max(1)).default([]),
   pois: z.array(PointOfInterestSchema).default([]),
-  /** Row-major exploration bitfield (0 unexplored, 1 explored, 2 visible). */
+  /** Row-major exploration state (0 unexplored, 1 explored, 2 visible). */
   fog: z.array(z.number().int().min(0).max(2)).default([]),
 });
 export type WorldState = z.infer<typeof WorldStateSchema>;
+
+export const WorldIssueSchema = z.object({
+  code: z.string().min(1),
+  message: z.string().min(1),
+  severity: z.enum(["error", "warning"]),
+  hex: HexSchema.optional(),
+});
+export type WorldIssue = z.infer<typeof WorldIssueSchema>;
+
+export const WorldReportSchema = z.object({
+  seed: z.string().min(1),
+  elapsedMs: z.number().min(0),
+  passed: z.boolean(),
+  errors: z.array(WorldIssueSchema).default([]),
+  warnings: z.array(WorldIssueSchema).default([]),
+  stats: z.object({
+    landTiles: z.number().int().min(0),
+    waterTiles: z.number().int().min(0),
+    settlements: z.number().int().min(0),
+    dungeons: z.number().int().min(0),
+    rivers: z.number().int().min(0),
+    roads: z.number().int().min(0),
+    biomes: z.record(z.string(), z.number()),
+  }),
+});
+export type WorldReport = z.infer<typeof WorldReportSchema>;
+
+export const WorldGenRequestSchema = z.object({
+  source: WorldSourceSchema,
+  seed: z.string().min(1).max(80),
+  params: WorldGenParamsSchema.optional(),
+  packId: z.string().optional(),
+});
+export type WorldGenRequest = z.infer<typeof WorldGenRequestSchema>;
+
+export const WorldGenResultSchema = z.object({
+  world: WorldStateSchema,
+  report: WorldReportSchema,
+});
+export type WorldGenResult = z.infer<typeof WorldGenResultSchema>;
+
+export const HandcraftedWorldPackSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  /** Rows of terrain symbols, one character per hex. */
+  rows: z.array(z.string()).min(1),
+  pois: z.array(
+    z.object({
+      id: z.string().min(1),
+      kind: z.enum(["town", "village", "dungeon", "ruin", "shrine", "camp", "landmark"]),
+      name: z.string().min(1),
+      col: z.number().int().min(0),
+      row: z.number().int().min(0),
+      description: z.string().default(""),
+    }),
+  ),
+  /** Optional road paths in offset coordinates, in order. */
+  roads: z.array(z.array(z.object({ col: z.number().int(), row: z.number().int() }))).default([]),
+});
+export type HandcraftedWorldPack = z.infer<typeof HandcraftedWorldPackSchema>;
 
 export const RelationshipSchema = z.object({
   trust: z.number().int().min(-100).max(100).default(0),
@@ -199,9 +272,24 @@ export const GameStateSchema = z.object({
   relationships: z.record(z.string(), RelationshipSchema).default({}),
   flags: z.record(z.string(), z.unknown()).default({}),
   battle: BattleStateSchema.optional(),
-  rng: z.object({ seed: z.string(), cursor: z.number().int().min(0).default(0) }),
+  rng: z.object({
+    seed: z.string(),
+    cursor: z.number().int().min(0).default(0),
+    state: z.number().int().optional(),
+  }),
 });
 export type GameState = z.infer<typeof GameStateSchema>;
+
+export const CampaignSaveRequestSchema = z.object({
+  state: GameStateSchema,
+});
+export type CampaignSaveRequest = z.infer<typeof CampaignSaveRequestSchema>;
+
+export const CampaignResponseSchema = z.object({
+  campaign: GameStateSchema.nullable(),
+  updatedAt: z.string().nullable(),
+});
+export type CampaignResponse = z.infer<typeof CampaignResponseSchema>;
 
 export const GameCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("party.move"), to: HexSchema, cost: z.number().int().min(0).optional() }),

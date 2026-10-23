@@ -4,6 +4,7 @@ import {
   type AiCallLog,
   type AiStreamEvent,
   AiTestRequestSchema,
+  CampaignSaveRequestSchema,
   SettingsPatchSchema,
 } from "@iwakura/contracts";
 import { Hono } from "hono";
@@ -14,7 +15,12 @@ import { listModels } from "./ai/models.js";
 import { computeCostUsd } from "./ai/pricing.js";
 import { streamTurn } from "./ai/provider.js";
 import type { Db } from "./db.js";
-import { AiCallRepository, ModelCacheRepository, SettingsRepository } from "./db-repositories.js";
+import {
+  AiCallRepository,
+  CampaignRepository,
+  ModelCacheRepository,
+  SettingsRepository,
+} from "./db-repositories.js";
 import type { Keystore } from "./keystore.js";
 
 export interface AppOptions {
@@ -60,6 +66,7 @@ export function createApp(options: AppOptions): Hono {
   const settingsRepo = new SettingsRepository(db);
   const callsRepo = new AiCallRepository(db);
   const cacheRepo = new ModelCacheRepository(db);
+  const campaignRepo = new CampaignRepository(db);
   const startedAt = Date.now();
 
   const app = new Hono();
@@ -134,6 +141,26 @@ export function createApp(options: AppOptions): Hono {
     settingsRepo.save(next);
     logger.info({ ai: next.ai }, "settings updated");
     return c.json(settingsPayload());
+  });
+
+  app.get("/api/campaign", (c) => {
+    const stored = campaignRepo.get();
+    return c.json({ campaign: stored?.state ?? null, updatedAt: stored?.updatedAt ?? null });
+  });
+
+  app.put("/api/campaign", async (c) => {
+    const parsed = CampaignSaveRequestSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) {
+      return c.json({ error: "Invalid campaign state", code: "invalid_campaign" }, 400);
+    }
+    const updatedAt = campaignRepo.save(parsed.data.state);
+    logger.info({ campaignId: parsed.data.state.campaign.id }, "campaign saved");
+    return c.json({ ok: true, updatedAt, id: parsed.data.state.campaign.id });
+  });
+
+  app.delete("/api/campaign", (c) => {
+    campaignRepo.clear();
+    return c.json({ ok: true });
   });
 
   app.get("/api/models", async (c) => {

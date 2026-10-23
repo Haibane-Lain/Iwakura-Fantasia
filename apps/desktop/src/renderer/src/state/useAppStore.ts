@@ -1,8 +1,13 @@
-import type { Bootstrap, HealthResponse, ModelInfo, SettingsResponse } from "@iwakura/contracts";
+import type { Bootstrap, GameState, HealthResponse, ModelInfo, SettingsResponse } from "@iwakura/contracts";
 import { create } from "zustand";
 import { ApiClient } from "../api/client";
 
-export type Screen = "menu" | "campaign" | "lab" | "settings";
+export type Screen = "menu" | "campaign" | "world" | "lab" | "settings";
+export type CampaignSaveState = "idle" | "saving" | "saved" | "error";
+
+// Serialize campaign writes so a rapid sequence of travels can never finish
+// out of order and restore an older position.
+let saveQueue: Promise<void> = Promise.resolve();
 
 interface AppStore {
   screen: Screen;
@@ -12,6 +17,9 @@ interface AppStore {
   models: ModelInfo[];
   modelsSource: "live" | "cache" | "static";
   health: HealthResponse | null;
+  campaign: GameState | null;
+  campaignUpdatedAt: string | null;
+  campaignSaveState: CampaignSaveState;
   loading: boolean;
   bootError: string | null;
   setScreen: (screen: Screen) => void;
@@ -20,6 +28,9 @@ interface AppStore {
   refreshModels: (refresh?: boolean) => Promise<void>;
   refreshHealth: () => Promise<void>;
   applySettings: (settings: SettingsResponse) => void;
+  setCampaign: (campaign: GameState) => void;
+  saveCampaign: (campaign: GameState) => Promise<void>;
+  clearCampaign: () => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -30,6 +41,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   models: [],
   modelsSource: "static",
   health: null,
+  campaign: null,
+  campaignUpdatedAt: null,
+  campaignSaveState: "idle",
   loading: true,
   bootError: null,
 
@@ -42,15 +56,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
       const bootstrap = await window.iwakura.getBootstrap();
       const api = new ApiClient(bootstrap.apiBase, bootstrap.token);
-      const [health, settings, models] = await Promise.all([
+      const [health, settings, models, saved] = await Promise.all([
         api.health(),
         api.getSettings(),
         api.getModels(),
+        api.getCampaign(),
       ]);
       const hash = window.location.hash.replace(/^#/, "");
-      const initialScreen: Screen = ["menu", "campaign", "lab", "settings"].includes(hash)
+      const requestedScreen: Screen = ["menu", "campaign", "world", "lab", "settings"].includes(hash)
         ? (hash as Screen)
         : "menu";
+      const initialScreen: Screen =
+        requestedScreen === "world" && !saved.campaign ? "campaign" : requestedScreen;
       set({
         api,
         bootstrap,
@@ -58,6 +75,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         settings,
         models: models.models,
         modelsSource: models.source,
+        campaign: saved.campaign,
+        campaignUpdatedAt: saved.updatedAt,
         loading: false,
         bootError: null,
         screen: initialScreen,
@@ -92,4 +111,35 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   applySettings: (settings) => set({ settings }),
+
+  setCampaign: (campaign) =>
+    set({
+      campaign,
+      campaignUpdatedAt: campaign.campaign.updatedAt,
+      campaignSaveState: "idle",
+    }),
+
+  saveCampaign: async (campaign) => {
+    const api = get().api;
+    if (!api) return;
+    set({ campaign, campaignSaveState: "saving" });
+    const state = campaign;
+    const write = async () => {
+      try {
+        const result = await api.saveCampaign(state);
+        set({ campaignUpdatedAt: result.updatedAt, campaignSaveState: "saved" });
+      } catch {
+        set({ campaignSaveState: "error" });
+      }
+    };
+    saveQueue = saveQueue.then(write, write);
+    await saveQueue;
+  },
+
+  clearCampaign: async () => {
+    const api = get().api;
+    if (!api) return;
+    await api.clearCampaign();
+    set({ campaign: null, campaignUpdatedAt: null, campaignSaveState: "idle" });
+  },
 }));

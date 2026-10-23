@@ -1,2 +1,6 @@
+export * from "./grid.js";
 export * from "./hex.js";
+export * from "./noise.js";
 export * from "./rng.js";
+export * from "./world.js";
+export * from "./worldgen.js";

@@ -71,6 +71,7 @@ export function MainMenu() {
   const settings = useAppStore((state) => state.settings);
   const modelsSource = useAppStore((state) => state.modelsSource);
   const bootstrap = useAppStore((state) => state.bootstrap);
+  const campaign = useAppStore((state) => state.campaign);
 
   const providerReady = settings?.apiKeyConfigured ?? false;
   const spend = settings?.spendThisMonthUsd ?? 0;
@@ -101,7 +102,13 @@ export function MainMenu() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button type="button" className="btn" disabled title="No saved chronicles yet">
+            <button
+              type="button"
+              className="btn"
+              disabled={!campaign}
+              title={campaign ? `Continue ${campaign.campaign.name}` : "No saved chronicles yet"}
+              onClick={() => setScreen("world")}
+            >
               <ScrollText className="size-3.5" />
               Continue
             </button>
@@ -156,6 +163,26 @@ export function MainMenu() {
               <Metric label="Model catalog" value={modelsSource} hint="24h cache" />
               <Metric label="Budget" value={`${formatUsd(spend)} / ${formatUsd(budget)}`} hint="this month" />
             </div>
+
+            {campaign ? (
+              <div className="mt-4 flex items-center justify-between gap-3 border border-gold/25 bg-gold/[0.04] px-3 py-2">
+                <div className="min-w-0">
+                  <div className="kicker">Saved chronicle</div>
+                  <div className="truncate font-display text-sm text-parchment">{campaign.campaign.name}</div>
+                  <div className="text-[10px] text-faint">
+                    {campaign.world.name} · Day {campaign.clock.day}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost shrink-0 px-2! py-1! text-[10px]!"
+                  onClick={() => setScreen("world")}
+                >
+                  Enter
+                  <ArrowRight className="size-3" />
+                </button>
+              </div>
+            ) : null}
 
             <div className="rule my-4" />
 

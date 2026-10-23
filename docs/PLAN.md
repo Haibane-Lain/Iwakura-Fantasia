@@ -1,6 +1,6 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** M0 foundation complete (live-key acceptance pending); M1 hex world next
+**Status:** M1 hex world complete; M2 character creation next
 **Last updated:** 2026-10-23
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
@@ -897,22 +897,31 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - [x] AI debug panel v0: event stream, recent calls, tokens, cost, latency.
 - [x] Base UI shell, design tokens, screen router, main menu, AI Lab, settings, world-source placeholder.
 - [x] Vitest + Playwright Electron smoke test (navigation, keystore round-trip, missing-key UI).
-- [x] electron-builder packaging smoke test (unpacked Windows build, 1.8 MB `app.asar`).
+- [x] electron-builder packaging smoke test (unpacked Windows build, ~3.8 MB `app.asar` after Pixi assets).
 - [ ] Live acceptance: enter a valid OpenCode Go key, stream a test turn, verify usage and cost.
 
 **Exit:** packaged app launches; all checks pass except the live-key acceptance turn.
 
 ### M1 — Hex world
 
-- [ ] Hex math, A*, LOS, ranges, rings.
-- [ ] Seeded worldgen with plausibility validators + report.
-- [ ] Handcrafted world schema + sample pack.
-- [ ] World preview/reroll UI.
-- [ ] Pixi world renderer, camera, chunk baking, fog.
-- [ ] Party token, travel, time, encounters stub.
-- [ ] Save/load of world + party position.
+- [x] Hex math, A*, LOS, ranges, rings.
+- [x] Seeded worldgen with plausibility validators + report.
+- [x] Handcrafted world schema + sample pack (Redford Reach).
+- [x] World preview/reroll UI with a Web Worker generator and a 2D preview.
+- [x] PixiJS world renderer, pan/zoom camera, fog, labels, path preview, party token.
+- [x] Party token, click-to-travel, time advancement, terrain-aware road network, encounter stub.
+- [x] Save/load of world, fog, discoveries, and party position via the campaign API.
+- [x] Vitest worldgen/travel/validation coverage and a Playwright world creation/travel/save E2E.
 
-**Exit:** explore a generated or handcrafted region, save/reload.
+**Exit:** explore a generated or handcrafted region, save/reload. Achieved in the E2E.
+
+**M1 notes:**
+- Terrain is rendered in batched PixiJS Graphics layers rather than baked chunk textures. Chunk baking is deferred until larger maps or profiling require it.
+- The procedural generator validates core rules (land fraction, settlements, water access, spacing, road connectivity, river exits, POI placement, dungeon terrain). Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred to M3.
+- There is no automatic repair pass yet; rerolling the seed is the repair path.
+- Handcrafted roads currently use the same A* network builder as procedural worlds. Authored road paths are in the schema but not used by the sample pack.
+- The world setup screen auto-generates a small procedural preview on first visit, then regenerates on demand.
+- The renderer imports `pixi.js/unsafe-eval` to install Pixi's CSP-safe polyfills; the CSP itself remains strict (no `unsafe-eval`).
 
 ### M2 — Character and content
 
@@ -1098,14 +1107,16 @@ Create these as decisions are implemented:
 - Planning: complete.
 - Decisions locked: 8/8.
 - M0: implemented, tested, packaged; only the live-key acceptance turn remains.
-- Next: **M1 — Hex world**.
+- M1: implemented; procedural and handcrafted worlds generate, validate, render, travel, and save.
+- Next: **M2 — Character and content**.
 - Blockers: none.
 - Resolved: Electron 45 bundles Node 24.22, so `node:sqlite` works and `better-sqlite3` is unnecessary.
+- Resolved: Pixi 8 works under the strict CSP by importing `pixi.js/unsafe-eval`, which installs the non-eval polyfills.
 - Live key: the OpenCode Go error path was verified with an intentionally invalid key. A successful turn and real cost report require the user's key in Settings → OpenCode Go.
 
 ### M0 implementation notes
 
-- The local Hono server and all of its dependencies are bundled into the Electron main process. `app.asar` is ~1.8 MB and contains only `out/**` and `package.json`.
+- The local Hono server and all of its dependencies are bundled into the Electron main process. `app.asar` is ~3.8 MB after Pixi and the world worker, and contains only `out/**` and `package.json`.
 - The renderer never sees the API key. It receives only the loopback base URL and a per-launch bearer token from the preload bridge.
 - AI streaming consumes the SDK `fullStream` and handles `error`/`abort` parts explicitly. This avoids the unhandled `NoOutputGeneratedError` that the SDK's text/usage getters can raise when a provider fails before emitting text.
 - Model catalog calls use `Authorization`, `x-opencode-session`, and a custom user agent. Both the catalog and turns share the stable session identifier `iwakura:lab` for now; NPC turns will use `campaign:npc`.

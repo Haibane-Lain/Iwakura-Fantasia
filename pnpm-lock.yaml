@@ -123,6 +123,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@iwakura/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5
@@ -168,6 +171,9 @@ importers:
 
   packages/engine:
     dependencies:
+      '@iwakura/content':
+        specifier: workspace:*
+        version: link:../content
       '@iwakura/contracts':
         specifier: workspace:*
         version: link:../contracts

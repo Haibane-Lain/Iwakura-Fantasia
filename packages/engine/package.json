@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@iwakura/contracts": "workspace:*"
+    "@iwakura/contracts": "workspace:*",
+    "@iwakura/content": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

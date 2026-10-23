@@ -1,10 +1,11 @@
-import { FlaskConical, Hexagon, Map as MapIcon, Settings, Sparkles } from "lucide-react";
+import { FlaskConical, Globe2, Hexagon, Map as MapIcon, Settings, Sparkles } from "lucide-react";
 import { type Screen, useAppStore } from "../state/useAppStore";
 import { cn } from "./ui";
 
 const NAV: Array<{ id: Screen; label: string; icon: typeof MapIcon }> = [
   { id: "menu", label: "Chronicle", icon: MapIcon },
   { id: "campaign", label: "New Campaign", icon: Sparkles },
+  { id: "world", label: "World", icon: Globe2 },
   { id: "lab", label: "AI Lab", icon: FlaskConical },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -15,6 +16,7 @@ export function AppHeader() {
   const health = useAppStore((state) => state.health);
   const settings = useAppStore((state) => state.settings);
   const bootstrap = useAppStore((state) => state.bootstrap);
+  const campaign = useAppStore((state) => state.campaign);
 
   const keyReady = settings?.apiKeyConfigured ?? false;
 
@@ -53,7 +55,7 @@ export function AppHeader() {
               type="button"
               key={item.id}
               className={cn("nav-link flex items-center gap-1.5", screen === item.id && "nav-link-active")}
-              onClick={() => setScreen(item.id)}
+              onClick={() => setScreen(item.id === "world" && !campaign ? "campaign" : item.id)}
             >
               <Icon className="size-3" strokeWidth={1.5} />
               {item.label}

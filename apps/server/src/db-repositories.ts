@@ -1,5 +1,5 @@
-import type { AiCallLog, AppSettings, ModelInfo } from "@iwakura/contracts";
-import { AppSettingsSchema } from "@iwakura/contracts";
+import type { AiCallLog, AppSettings, GameState, ModelInfo } from "@iwakura/contracts";
+import { AppSettingsSchema, GameStateSchema } from "@iwakura/contracts";
 import type { Db } from "./db.js";
 
 const SETTINGS_KEY = "app.settings";
@@ -101,6 +101,42 @@ export class AiCallRepository {
 
   clear(): void {
     this.db.exec("DELETE FROM ai_calls");
+  }
+}
+
+export class CampaignRepository {
+  constructor(private readonly db: Db) {}
+
+  get(): { state: GameState; updatedAt: string } | null {
+    const row = this.db.prepare("SELECT state_json, updated_at FROM campaigns WHERE id = 'active'").get() as
+      | { state_json: string; updated_at: string }
+      | undefined;
+    if (!row) return null;
+    try {
+      return { state: GameStateSchema.parse(JSON.parse(row.state_json)), updatedAt: row.updated_at };
+    } catch {
+      return null;
+    }
+  }
+
+  save(state: GameState): string {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO campaigns (id, name, world_source, state_json, created_at, updated_at)
+         VALUES ('active', ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           world_source = excluded.world_source,
+           state_json = excluded.state_json,
+           updated_at = excluded.updated_at`,
+      )
+      .run(state.campaign.name, state.world.source, JSON.stringify(state), now, now);
+    return now;
+  }
+
+  clear(): void {
+    this.db.prepare("DELETE FROM campaigns WHERE id = 'active'").run();
   }
 }
 

@@ -3,6 +3,8 @@ import type {
   AiStreamEvent,
   AiTestRequest,
   AppSettings,
+  CampaignResponse,
+  GameState,
   HealthResponse,
   ModelInfo,
   SettingsPatch,
@@ -78,6 +80,18 @@ export class ApiClient {
 
   clearCalls(): Promise<{ ok: boolean }> {
     return this.request("DELETE", "/api/ai/calls");
+  }
+
+  getCampaign(): Promise<CampaignResponse> {
+    return this.request("GET", "/api/campaign");
+  }
+
+  saveCampaign(state: GameState): Promise<{ ok: boolean; updatedAt: string; id: string }> {
+    return this.request("PUT", "/api/campaign", { state });
+  }
+
+  clearCampaign(): Promise<{ ok: boolean }> {
+    return this.request("DELETE", "/api/campaign");
   }
 
   async streamAiTest(

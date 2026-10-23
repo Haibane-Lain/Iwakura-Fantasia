@@ -5,6 +5,7 @@ import { AiLab } from "./screens/AiLab";
 import { MainMenu } from "./screens/MainMenu";
 import { NewCampaign } from "./screens/NewCampaign";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import { WorldScreen } from "./screens/WorldScreen";
 import { useAppStore } from "./state/useAppStore";
 
 function BootScreen() {
@@ -53,6 +54,7 @@ export default function App() {
   const screen = useAppStore((state) => state.screen);
   const loading = useAppStore((state) => state.loading);
   const bootError = useAppStore((state) => state.bootError);
+  const campaign = useAppStore((state) => state.campaign);
   const init = useAppStore((state) => state.init);
   const started = useRef(false);
 
@@ -71,6 +73,7 @@ export default function App() {
       <main className="min-h-0 flex-1">
         {screen === "menu" ? <MainMenu /> : null}
         {screen === "campaign" ? <NewCampaign /> : null}
+        {screen === "world" ? campaign ? <WorldScreen /> : <NewCampaign /> : null}
         {screen === "lab" ? <AiLab /> : null}
         {screen === "settings" ? <SettingsScreen /> : null}
       </main>

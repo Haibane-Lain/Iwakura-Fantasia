@@ -5,7 +5,7 @@ import { _electron as electron, expect, test } from "@playwright/test";
 const appDir = resolve(process.cwd(), "apps/desktop");
 const electronPath = resolve(appDir, "node_modules/electron/dist/electron.exe");
 
-test("launches the shell and navigates the M0 screens", async () => {
+test("launches the shell, creates a world, travels, and navigates the M1 screens", async () => {
   expect(existsSync(electronPath), "Electron binary is installed").toBe(true);
   expect(
     existsSync(resolve(appDir, "out/main/index.js")),
@@ -31,9 +31,28 @@ test("launches the shell and navigates the M0 screens", async () => {
     await expect(window.getByText("SQLite · WAL").first()).toBeVisible();
     await expect(window.getByText("OpenCode Go").first()).toBeVisible();
 
+    // A handcrafted world is deterministic and has known nearby landmarks.
     await window.locator("nav").getByRole("button", { name: "New Campaign" }).click();
     await expect(window.getByRole("heading", { name: "New Chronicle" })).toBeVisible();
-    await expect(window.getByText("Same rules everywhere").first()).toBeVisible();
+    await window.getByRole("button", { name: /Handcrafted/ }).click();
+    await window.getByRole("button", { name: "Generate world" }).click();
+    await expect(window.getByText(/Redford Reach passed all hard checks/)).toBeVisible({ timeout: 15_000 });
+    await window.getByRole("button", { name: "Begin chronicle" }).click();
+
+    await expect(window.getByText("Selected hex").first()).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByText("Nearby landmarks").first()).toBeVisible();
+    await expect(window.locator("canvas").first()).toBeVisible();
+
+    await window.getByRole("button", { name: /Millbrook/ }).click();
+    await window.getByRole("button", { name: "Travel" }).click();
+    await expect(window.getByText(/Travelled \d+ hexes/)).toBeVisible({ timeout: 10_000 });
+    await window.getByRole("button", { name: "Save now" }).click();
+    await expect(window.getByText(/^Saved /).first()).toBeVisible({ timeout: 10_000 });
+
+    await window.locator("nav").getByRole("button", { name: "Chronicle" }).click();
+    await expect(window.getByText("Saved chronicle").first()).toBeVisible();
+    await window.getByRole("button", { name: "Continue" }).click();
+    await expect(window.getByText("Selected hex").first()).toBeVisible();
 
     await window.locator("nav").getByRole("button", { name: "AI Lab" }).click();
     await expect(window.getByRole("heading", { name: "AI Lab" })).toBeVisible();
@@ -51,8 +70,7 @@ test("launches the shell and navigates the M0 screens", async () => {
     await window.getByRole("button", { name: "Remove" }).click();
     await expect(window.getByText("missing").first()).toBeVisible({ timeout: 10_000 });
 
-    // With no key, the lab must surface a clean configuration error instead
-    // of hanging or crashing the server.
+    // With no key, the lab must surface a clean configuration error.
     await window.locator("nav").getByRole("button", { name: "AI Lab" }).click();
     await window.getByRole("button", { name: "Send turn" }).click();
     await expect(window.getByText("OpenCode Go API key is not configured").first()).toBeVisible({

@@ -1,3 +1,4 @@
+import { createGameState, generateWorld } from "@iwakura/engine";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
@@ -109,5 +110,57 @@ describe("local server", () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { calls: unknown[] };
     expect(body.calls).toHaveLength(0);
+  });
+
+  it("saves, reads, and clears the active campaign", async () => {
+    const empty = await app.request("/api/campaign", { headers: auth });
+    const emptyBody = (await empty.json()) as { campaign: null; updatedAt: null };
+    expect(emptyBody.campaign).toBeNull();
+
+    const world = generateWorld({
+      source: "handcrafted",
+      seed: "core:redford_reach",
+    }).world;
+    const state = createGameState({
+      world,
+      settings: {
+        worldSource: "handcrafted",
+        seed: "core:redford_reach",
+        genParams: {
+          width: 64,
+          height: 64,
+          seaLevel: 0.42,
+          climate: "varied",
+          magicLevel: "standard",
+          danger: "normal",
+          settlementDensity: 0.5,
+        },
+        difficulty: "normal",
+        contentRating: "teen",
+        aiEnabled: true,
+      },
+      campaignId: "campaign-test",
+      campaignName: "The Redford Chronicle",
+      now: new Date("2026-10-23T08:00:00.000Z"),
+    });
+
+    const save = await app.request("/api/campaign", {
+      method: "PUT",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ state }),
+    });
+    expect(save.status).toBe(200);
+
+    const loaded = await app.request("/api/campaign", { headers: auth });
+    expect(loaded.status).toBe(200);
+    const loadedBody = (await loaded.json()) as { campaign: typeof state; updatedAt: string };
+    expect(loadedBody.campaign.campaign.name).toBe("The Redford Chronicle");
+    expect(loadedBody.campaign.world.name).toBe("Redford Reach");
+    expect(loadedBody.updatedAt).toBeTruthy();
+
+    const clear = await app.request("/api/campaign", { method: "DELETE", headers: auth });
+    expect(clear.status).toBe(200);
+    const after = await app.request("/api/campaign", { headers: auth });
+    expect(((await after.json()) as { campaign: null }).campaign).toBeNull();
   });
 });
