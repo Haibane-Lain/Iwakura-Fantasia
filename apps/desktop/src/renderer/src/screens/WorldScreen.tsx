@@ -1,6 +1,7 @@
 import { getTerrain } from "@iwakura/content";
 import type { Hex } from "@iwakura/contracts";
 import {
+  enterLocalMap,
   formatClock,
   moveParty,
   nearbyPois,
@@ -12,9 +13,11 @@ import {
 import {
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   Clock3,
   Coins,
   Compass,
+  DoorOpen,
   Footprints,
   Map as MapIcon,
   Menu,
@@ -25,9 +28,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CharacterSheet } from "../components/CharacterSheet";
+import { QuestJournal } from "../components/QuestJournal";
 import { cn, Panel, SectionLabel, StatusDot } from "../components/ui";
 import { WorldCanvas } from "../components/WorldCanvas";
 import { useAppStore } from "../state/useAppStore";
+import { LocalScreen } from "./LocalScreen";
 
 function kindLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
@@ -43,6 +48,7 @@ export function WorldScreen() {
   const [selectedHex, setSelectedHex] = useState<Hex | null>(campaign?.party.position ?? null);
   const [toast, setToast] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [questOpen, setQuestOpen] = useState(false);
 
   useEffect(() => {
     if (!campaign) setScreen("campaign");
@@ -69,10 +75,12 @@ export function WorldScreen() {
   }, [campaign]);
 
   if (!campaign) return null;
+  if (campaign.local) return <LocalScreen />;
 
   const world = campaign.world;
   const party = campaign.party;
   const player = campaign.entities.player;
+  const currentPoi = poiAt(world, party.position);
   const currentTerrain = getTerrain(terrainAt(world, party.position));
 
   const travel = (hex: Hex) => {
@@ -94,6 +102,15 @@ export function WorldScreen() {
         text: `Travelled ${result.path.length} hexes in ${result.minutes} minutes.`,
       });
     }
+  };
+
+  const enterLocal = (poiId: string) => {
+    const result = enterLocalMap(campaign, poiId);
+    if (!result) {
+      setToast({ tone: "warn", text: "That place cannot be entered." });
+      return;
+    }
+    void saveCampaign(result.state);
   };
 
   const saveLabel =
@@ -134,7 +151,7 @@ export function WorldScreen() {
               <span className="truncate font-display text-base tracking-wide text-parchment">
                 {campaign.campaign.name}
               </span>
-              <span className="chip border-gold/30 text-[9px] text-gold/80">M1</span>
+              <span className="chip border-gold/30 text-[9px] text-gold/80">M3</span>
             </div>
             <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
               {world.name} · seed {world.seed}
@@ -147,6 +164,16 @@ export function WorldScreen() {
               >
                 <UserRound className="size-2.5" />
                 {player.name} · HP {player.hp.current}/{player.hp.max} · AC {player.ac}
+              </button>
+            ) : null}
+            {currentPoi && ["town", "village", "dungeon"].includes(currentPoi.kind) ? (
+              <button
+                type="button"
+                className="btn mt-1.5 px-2! py-1! text-[9px]!"
+                onClick={() => enterLocal(currentPoi.id)}
+              >
+                <DoorOpen className="size-3" />
+                Enter {currentPoi.name}
               </button>
             ) : null}
           </div>
@@ -253,6 +280,18 @@ export function WorldScreen() {
                   {info.poi.description ? (
                     <p className="mt-1 text-[10px] leading-5 text-muted">{info.poi.description}</p>
                   ) : null}
+                  {selectedHex.q === party.position.q &&
+                  selectedHex.r === party.position.r &&
+                  ["town", "village", "dungeon"].includes(info.poi.kind) ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary mt-2 w-full"
+                      onClick={() => enterLocal(info.poi!.id)}
+                    >
+                      <Footprints className="size-3.5" />
+                      Enter {info.poi.kind === "dungeon" ? "dungeon" : info.poi.kind}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -340,6 +379,10 @@ export function WorldScreen() {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className="btn px-3! py-1.5!" onClick={() => setQuestOpen(true)}>
+              <BookOpen className="size-3.5" />
+              Journal
+            </button>
             <button type="button" className="btn px-3! py-1.5!" onClick={() => setSheetOpen(true)}>
               <UserRound className="size-3.5" />
               Character
@@ -379,6 +422,7 @@ export function WorldScreen() {
       ) : null}
 
       {sheetOpen ? <CharacterSheet onClose={() => setSheetOpen(false)} /> : null}
+      {questOpen ? <QuestJournal onClose={() => setQuestOpen(false)} /> : null}
     </div>
   );
 }

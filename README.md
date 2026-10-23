@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** M2 character and content complete. M3 (towns, NPCs, quests) is next.
+**Status:** M3 towns, NPCs, and quests complete. M4 (battle) is next.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md)
 
@@ -30,8 +30,14 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Derived character rules**: ancestry bonuses, HP, AC, Focus, speed, proficiency, saves, skills, starting kit, auto-equipped weapon and armor.
 - **Character sheet** with Overview, Inventory, and Skills tabs, equip/unequip actions, and deterministic skill rolls that advance the campaign RNG.
 - **Procedural portraits and sigils** generated from a seed and palette, with no external art dependency.
-- **Tests**: Vitest for hex/RNG/worldgen/character/content/AI prompt/server routes (53 tests), and a Playwright Electron smoke test covering world creation, character creation, character sheet rolls, travel, save/continue, keystore round-trip, and the missing-key error path.
-- **Packaged Windows build** via electron-builder (`--dir` smoke test): under 4 MB `app.asar`, no native modules.
+- **Town and dungeon local maps** built on the same hex geometry and pathfinding as the world map, with buildings, exits, local travel, hover paths, and save/continue inside a location.
+- **NPCs with hourly schedules** across seven authored characters plus a generic road trader fallback for procedural settlements.
+- **Authored dialogue** with quest-state roots, relationship changes, merchants, and a free-speech AI hook that streams an in-character reply from the local gateway.
+- **Merchant trade** with per-campaign stock, buy/sell validation, gold, inventory, and equipped-item protection.
+- **Quest journal and state machine**: accept, reveal targets on the map, progress reach/interact objectives, turn in for gold and items.
+- **The Mill That Stopped** and **The Greywatch Light** authored quests, plus a crypt ledger, dungeon encounter trigger, inn rest, and wait controls.
+- **Tests**: Vitest for hex/RNG/worldgen/character/content/local maps/NPC schedules/dialogue/quests/trade/AI prompt/server routes (68 tests), and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, local save/continue, keystore round-trip, and the missing-key error path.
+- **Packaged Windows build** via electron-builder (`--dir` smoke test): about 4 MB `app.asar`, no native modules.
 
 ![AI Lab](docs/images/ai-lab.png)
 
@@ -42,6 +48,18 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 ![Character creation](docs/images/character-creation.png)
 
 ![Character sheet](docs/images/character-sheet.png)
+
+![Redford town map](docs/images/local-town.png)
+
+![NPC dialogue](docs/images/dialogue.png)
+
+![Quest journal](docs/images/quest-journal.png)
+
+![Market trade](docs/images/shop.png)
+
+![The Old Mill Crypt](docs/images/local-dungeon.png)
+
+![Crypt ledger recovered](docs/images/dungeon-ledger.png)
 
 ---
 
@@ -60,8 +78,10 @@ Then:
 2. Choose **Procedural** or **Handcrafted**, generate a world, inspect the report, and press **Choose character**.
 3. Build a character through ancestry, class, background, attributes, skills, appearance, name, and review.
 4. Begin the chronicle. Drag to pan, scroll to zoom, and click a hex to travel. The clock, fog, discoveries, and save update automatically.
-5. Open the **Character** sheet to inspect stats, equipment, and roll skill checks.
-6. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab.
+5. Walk onto Redford or Millbrook and use **Enter** to switch to the local hex map. Talk to people, trade, rest, wait, and open the **Journal**.
+6. Accept Hessa's quest in Redford, travel to the Old Mill Crypt, recover the ledger, and return to her. The quest reveals the crypt on the world map.
+7. Open the **Character** sheet to inspect stats, equipment, and roll skill checks.
+8. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab or the dialogue AI hook.
 
 Without a key, the world and saves still work. AI actions return a clear configuration error instead of blocking the UI.
 
@@ -162,14 +182,18 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Current limitations
 
-- Town/dungeon local maps, battle maps, NPC dialogue, quests, companions, and romance are planned for M3–M6.
+- Battle maps, tactical combat, companions, and romance are planned for M4–M6. Travel and dungeon encounters currently log a warning stub.
 - Character progression currently stops at level 1. Subclasses, feats, level-up UI, and level 5+ content are not implemented yet.
 - Standard array is assigned through six selects; rolled stats are auto-assigned by class priority. Drag-and-drop stat assignment and manual rolled assignment are deferred.
 - Class skill choices exclude skills already granted by background or ancestry. There are no expertise or tool proficiencies yet.
 - The world map renders terrain in batched PixiJS layers rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
-- The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred to M3.
+- The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred.
 - The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.
-- Travel encounters are a stub. A warning toast appears, but battle maps arrive in M4.
+- Town and dungeon maps use a dedicated local PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
+- Handcrafted Redford, Millbrook, and the Old Mill Crypt have authored local maps and NPCs. Procedural settlements share a generic settlement layout and a generic road trader rather than unique generated towns.
+- NPC schedules are hour-granular and computed from the campaign clock. NPCs do not pathfind between spots; they are placed at the active schedule spot when the local map is viewed.
+- The dialogue AI hook builds a full NPC persona prompt and streams an in-character reply through the local gateway, but it only displays speech. Structured intent validation and state mutation remain M5 work.
+- Quests are authored, linear state machines with reach/interact objectives. Quest templates, branching, factions, and world reactions are M6 work.
 - The handcrafted world currently generates its roads through the same terrain-aware network builder; authored road paths are supported by the schema but not used by the sample pack.
 - `pnpm package` produces an unpacked Windows build; the NSIS installer target is configured but not yet signed or branded with a custom icon.
 - A successful live OpenCode Go turn still needs a valid key; the error path and adapter have been verified with an intentionally invalid key.
@@ -177,10 +201,10 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ---
 
-## Next milestone: M3 — Towns, NPCs, quests
+## Next milestone: M4 — Battle
 
-- Town and dungeon local maps built on the same hex renderer.
-- NPC placement, schedules, and interaction prompts.
-- Authored dialogue fallback, merchant trade, and quest state machines.
-- Local navigation, building interiors, and dungeon encounter triggers.
-- The first town-level AI hooks, ahead of the full NPC pipeline in M5.
+- Battle maps generated from the current world hex or dungeon encounter.
+- Initiative, rounds, action economy, movement, attacks, and cover/LOS.
+- Player abilities, conditions, enemy utility AI, and companion turns.
+- Victory, defeat, retreat, rewards, and consequences.
+- Battle UI and combat log, with encounter triggers wired from travel and dungeons.

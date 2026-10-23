@@ -5,7 +5,8 @@ import { _electron as electron, expect, test } from "@playwright/test";
 const appDir = resolve(process.cwd(), "apps/desktop");
 const electronPath = resolve(appDir, "node_modules/electron/dist/electron.exe");
 
-test("creates a character, explores Redford Reach, saves, and navigates the M2 screens", async () => {
+test("creates a character, explores Redford and the crypt, trades, and finishes a quest", async () => {
+  test.setTimeout(120_000);
   expect(existsSync(electronPath), "Electron binary is installed").toBe(true);
   expect(
     existsSync(resolve(appDir, "out/main/index.js")),
@@ -67,16 +68,92 @@ test("creates a character, explores Redford Reach, saves, and navigates the M2 s
     await expect(window.getByText(/d20 \d+/).first()).toBeVisible();
     await window.getByRole("button", { name: "Close", exact: true }).click();
 
-    await window.getByRole("button", { name: /Millbrook/ }).click();
-    await window.getByRole("button", { name: "Travel" }).click();
-    await expect(window.getByText("The party is here.").first()).toBeVisible({ timeout: 10_000 });
-    await window.getByRole("button", { name: "Save now" }).click();
-    await expect(window.getByText(/^Saved /).first()).toBeVisible({ timeout: 10_000 });
+    // Enter Redford and accept Hessa's quest through authored dialogue.
+    await window.getByRole("button", { name: "Enter Redford" }).click();
+    await expect(window.getByText("People here")).toBeVisible({ timeout: 10_000 });
+    await window.locator("canvas").first().waitFor();
+    await window
+      .getByRole("button", { name: /Talk to Hessa Vale/ })
+      .first()
+      .click();
+    await expect(window.getByRole("heading", { name: "Hessa Vale" })).toBeVisible();
+    await window.getByRole("button", { name: /I'll go to the crypt and find your ledger/ }).click();
+    await expect(window.getByText(/Quest accepted: The Mill That Stopped/).first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
 
+    await window.getByRole("button", { name: "Journal" }).click();
+    await expect(window.getByRole("heading", { name: "Quest Journal" })).toBeVisible();
+    await expect(window.getByText("The Mill That Stopped").first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
+
+    // Buy and sell at the market. The engine owns stock and gold.
+    await window
+      .getByRole("button", { name: /Trade at Redford Market/ })
+      .first()
+      .click();
+    await expect(window.getByRole("heading", { name: "Bryn's Stall" })).toBeVisible();
+    await window.getByRole("button", { name: "Buy Torch" }).click();
+    await expect(window.getByText(/Bought Torch/).first()).toBeVisible();
+    await window.getByRole("button", { name: "Sell", exact: true }).click();
+    await window.getByRole("button", { name: "Sell Torch" }).click();
+    await expect(window.getByText(/Sold Torch/).first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
+
+    // The quest acceptance reveals the crypt as a known nearby landmark.
+    await window
+      .getByRole("button", { name: /Leave via South Road/ })
+      .first()
+      .click();
+    await expect(window.getByText("Nearby landmarks").first()).toBeVisible();
+    await window.getByRole("button", { name: /The Old Mill Crypt/ }).click();
+    await window.getByRole("button", { name: "Travel" }).click();
+    await expect(window.getByText("The party is here.").first()).toBeVisible({ timeout: 20_000 });
+    await window.getByRole("button", { name: "Enter The Old Mill Crypt" }).click();
+    await expect(window.getByText("The Old Mill Crypt").first()).toBeVisible({ timeout: 10_000 });
+
+    // Walk the dungeon, trigger the encounter stub, recover the ledger.
+    await window.getByRole("button", { name: "Walk to Mill ledger" }).click();
+    await expect(window.getByRole("button", { name: "Examine Mill ledger" }).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await window.getByRole("button", { name: "Examine Mill ledger" }).first().click();
+    await expect(window.getByText(/You take the Mill Ledger/).first()).toBeVisible();
+    await window.getByRole("button", { name: "Journal" }).click();
+    await expect(window.getByText("ready to turn in").first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
+
+    // Return to Redford and turn in the quest.
+    await window
+      .getByRole("button", { name: /Leave via Stairs to the surface/ })
+      .first()
+      .click();
+    await expect(window.getByText("Nearby landmarks").first()).toBeVisible();
+    await window
+      .getByRole("button", { name: /Redford/ })
+      .first()
+      .click();
+    await window.getByRole("button", { name: "Travel" }).click();
+    await expect(window.getByText("The party is here.").first()).toBeVisible({ timeout: 20_000 });
+    await window.getByRole("button", { name: "Enter Redford" }).click();
+    await expect(window.getByText("People here")).toBeVisible();
+    await window
+      .getByRole("button", { name: /Talk to Hessa Vale/ })
+      .first()
+      .click();
+    await window.getByRole("button", { name: /Hand over the ledger/ }).click();
+    await expect(window.getByText(/Quest complete: The Mill That Stopped/).first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
+    await window.getByRole("button", { name: "Journal" }).click();
+    await window.getByRole("button", { name: "Completed" }).click();
+    await expect(window.getByText("The Mill That Stopped").first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
+
+    // Save the local state and verify that Continue restores it.
+    await window.getByRole("button", { name: "Save", exact: true }).click();
     await window.locator("nav").getByRole("button", { name: "Chronicle" }).click();
     await expect(window.getByText("Saved chronicle").first()).toBeVisible();
     await window.getByRole("button", { name: "Continue" }).click();
-    await expect(window.getByText("Selected hex").first()).toBeVisible();
+    await expect(window.getByText("People here")).toBeVisible({ timeout: 10_000 });
 
     await window.locator("nav").getByRole("button", { name: "AI Lab" }).click();
     await expect(window.getByRole("heading", { name: "AI Lab" })).toBeVisible();

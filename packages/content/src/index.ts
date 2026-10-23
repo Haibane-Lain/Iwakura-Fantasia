@@ -1,6 +1,7 @@
 import type { Ability, Ancestry, Background, CharacterClass, Item } from "@iwakura/contracts";
 
 export * from "./appearance.js";
+export * from "./local.js";
 export * from "./terrains.js";
 export * from "./worlds.js";
 
@@ -331,6 +332,66 @@ export const ITEMS: Item[] = [
     valueGold: 50,
     stackable: true,
     stats: { heal: "2d4+2" },
+  },
+  {
+    id: "core:torch",
+    name: "Torch",
+    description: "Pitch-soaked reed wrapped in cloth. Burns for a few hours and makes a poor club.",
+    kind: "consumable",
+    rarity: "common",
+    valueGold: 1,
+    stackable: true,
+    stats: { light: 6 },
+  },
+  {
+    id: "core:rope",
+    name: "Hemp Rope",
+    description: "Thirty feet of good rope. Useful for almost everything except keeping secrets.",
+    kind: "tool",
+    rarity: "common",
+    valueGold: 2,
+    stackable: false,
+    stats: { lengthFeet: 30 },
+  },
+  {
+    id: "core:rations",
+    name: "Trail Rations",
+    description: "Hard bread, dried fish, and a wedge of cheese that has seen better days.",
+    kind: "consumable",
+    rarity: "common",
+    valueGold: 1,
+    stackable: true,
+    stats: { days: 1 },
+  },
+  {
+    id: "core:iron_key",
+    name: "Iron Key",
+    description: "A heavy key with a spiral cut into its bow. It fits no door in Redford.",
+    kind: "treasure",
+    rarity: "uncommon",
+    valueGold: 8,
+    stackable: false,
+    stats: { questHint: "crypt" },
+  },
+  {
+    id: "core:silver_locket",
+    name: "Silver Locket",
+    description: "A plain locket, warm from a pocket. Inside is a pressed sprig of river mint.",
+    kind: "treasure",
+    rarity: "uncommon",
+    valueGold: 30,
+    stackable: false,
+    stats: { keepsake: true },
+  },
+  {
+    id: "core:mills_ledger",
+    name: "Mill Ledger",
+    description: "Hessa's missing ledger. The last entries name four men and a debt that is not money.",
+    kind: "quest",
+    rarity: "rare",
+    valueGold: 0,
+    stackable: false,
+    stats: { quest: "core:the_stopped_mill" },
   },
 ];
 

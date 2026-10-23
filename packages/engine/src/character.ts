@@ -80,6 +80,20 @@ export function maxFocus(attributes: Attributes, classId: string): number {
   return Math.max(0, characterClass.focusPerLevel + primary);
 }
 
+export function addItemToInventory(
+  inventory: InventoryEntry[],
+  itemId: string,
+  quantity = 1,
+): InventoryEntry[] {
+  const existing = inventory.find((entry) => entry.itemId === itemId);
+  if (existing) {
+    return inventory.map((entry) =>
+      entry.itemId === itemId ? { ...entry, quantity: Math.min(999, entry.quantity + quantity) } : entry,
+    );
+  }
+  return [...inventory, { itemId, quantity: Math.min(999, Math.max(1, quantity)) }];
+}
+
 export function createPlayerEntity(build: CharacterBuild): Entity {
   const ancestry = getAncestry(build.ancestryId);
   const characterClass = getClass(build.classId);

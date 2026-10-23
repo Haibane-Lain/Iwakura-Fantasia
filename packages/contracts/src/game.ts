@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AttributeKeySchema, AttributesSchema, ConditionIdSchema, ContentIdSchema } from "./content.js";
+import { LocalMapKindSchema } from "./local.js";
 
 export const SAVE_VERSION = 1;
 
@@ -214,6 +215,7 @@ export const EntitySchema = z.object({
   appearance: CharacterAppearanceSchema.optional(),
   factionId: z.string().optional(),
   hex: HexSchema.optional(),
+  localMapId: z.string().optional(),
   recruitable: z.boolean().default(false),
   companion: z.boolean().default(false),
   tags: z.array(z.string()).default([]),
@@ -228,6 +230,79 @@ export const PartyStateSchema = z.object({
   position: HexSchema,
 });
 export type PartyState = z.infer<typeof PartyStateSchema>;
+
+export const LocalBuildingSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  kind: z.enum(["shop", "inn", "temple", "hall", "home", "gate", "workshop", "other"]),
+  hex: HexSchema,
+  description: z.string().default(""),
+  shopId: z.string().optional(),
+});
+export type LocalBuilding = z.infer<typeof LocalBuildingSchema>;
+
+export const LocalInteractableSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  kind: z.enum(["object", "altar", "shrine", "chest", "sign", "stairs"]),
+  hex: HexSchema,
+  description: z.string().default(""),
+  itemId: ContentIdSchema.optional(),
+  oneShot: z.boolean().default(true),
+});
+export type LocalInteractable = z.infer<typeof LocalInteractableSchema>;
+
+export const LocalExitSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  hex: HexSchema,
+  description: z.string().default(""),
+  target: z.enum(["world"]).default("world"),
+});
+export type LocalExit = z.infer<typeof LocalExitSchema>;
+
+export const LocalEncounterSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  hex: HexSchema,
+  radius: z.number().int().min(0).max(4).default(0),
+  description: z.string().default(""),
+});
+export type LocalEncounter = z.infer<typeof LocalEncounterSchema>;
+
+export const LocalMapSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  kind: LocalMapKindSchema,
+  description: z.string().default(""),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  /** Row-major local tile IDs. */
+  tiles: z.array(z.string()).default([]),
+  entrance: HexSchema,
+  buildings: z.array(LocalBuildingSchema).default([]),
+  exits: z.array(LocalExitSchema).default([]),
+  interactables: z.array(LocalInteractableSchema).default([]),
+  encounters: z.array(LocalEncounterSchema).default([]),
+  spots: z.record(z.string(), HexSchema).default({}),
+});
+export type LocalMap = z.infer<typeof LocalMapSchema>;
+
+export const LocalStateSchema = z.object({
+  map: LocalMapSchema,
+  position: HexSchema,
+  returnWorldPosition: HexSchema,
+  poiId: z.string().min(1),
+  visitedInteractables: z.array(z.string()).default([]),
+  encounterFlags: z.record(z.string(), z.boolean()).default({}),
+});
+export type LocalState = z.infer<typeof LocalStateSchema>;
+
+export const ShopStateSchema = z.object({
+  id: z.string().min(1),
+  stock: z.record(z.string(), z.number().int().min(0)).default({}),
+});
+export type ShopState = z.infer<typeof ShopStateSchema>;
 
 export const QuestStatusSchema = z.enum(["available", "active", "completed", "failed", "abandoned"]);
 
@@ -303,6 +378,8 @@ export const GameStateSchema = z.object({
   factions: z.record(z.string(), FactionStateSchema).default({}),
   relationships: z.record(z.string(), RelationshipSchema).default({}),
   flags: z.record(z.string(), z.unknown()).default({}),
+  local: LocalStateSchema.optional(),
+  shops: z.record(z.string(), ShopStateSchema).default({}),
   battle: BattleStateSchema.optional(),
   rng: z.object({
     seed: z.string(),

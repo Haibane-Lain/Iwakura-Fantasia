@@ -2,7 +2,6 @@ import { getTerrain, isWaterTerrain } from "@iwakura/content";
 import type {
   CampaignSettings,
   CharacterBuild,
-  Clock,
   GameState,
   Hex,
   PointOfInterest,
@@ -11,8 +10,12 @@ import type {
 import { createPlayerEntity, defaultCharacterBuild } from "./character.js";
 import { axialIndex, hexesInWorldRadius } from "./grid.js";
 import { distance, findPath, hexKey, spiral } from "./hex.js";
+import { createNpcEntities, progressQuests } from "./local.js";
 import { createRng } from "./rng.js";
 import { rngFromGameState } from "./state-rng.js";
+import { advanceClock } from "./time.js";
+
+export { advanceClock, formatClock, timeOfDay } from "./time.js";
 
 export function terrainAt(world: WorldState, h: Hex): string {
   const index = axialIndex(world.width, world.height, h);
@@ -78,32 +81,6 @@ export function findStartHex(world: WorldState): Hex {
   return { q: 0, r: 0 };
 }
 
-export function advanceClock(clock: Clock, minutes: number): Clock {
-  const total = clock.hour * 60 + clock.minute + Math.max(0, Math.round(minutes));
-  const dayOffset = Math.floor(total / 1440);
-  const remainder = ((total % 1440) + 1440) % 1440;
-  return {
-    day: clock.day + dayOffset,
-    hour: Math.floor(remainder / 60),
-    minute: remainder % 60,
-  };
-}
-
-export function formatClock(clock: Clock): string {
-  const hh = String(clock.hour).padStart(2, "0");
-  const mm = String(clock.minute).padStart(2, "0");
-  return `Day ${clock.day} · ${hh}:${mm}`;
-}
-
-export function timeOfDay(clock: Clock): "night" | "dawn" | "morning" | "afternoon" | "dusk" {
-  if (clock.hour < 5) return "night";
-  if (clock.hour < 8) return "dawn";
-  if (clock.hour < 12) return "morning";
-  if (clock.hour < 18) return "afternoon";
-  if (clock.hour < 21) return "dusk";
-  return "night";
-}
-
 export interface CreateGameStateOptions {
   world: WorldState;
   settings: CampaignSettings;
@@ -142,11 +119,12 @@ export function createGameState(options: CreateGameStateOptions): GameState {
       gold: 25,
       position: start,
     },
-    entities: { [player.id]: player },
+    entities: { ...createNpcEntities(), [player.id]: player },
     quests: {},
     factions: {},
     relationships: {},
     flags: {},
+    shops: {},
     rng: { seed: snapshot.seed, state: snapshot.state, cursor: snapshot.cursor },
   };
 }
@@ -177,17 +155,20 @@ export function moveParty(state: GameState, to: Hex): MoveResult | null {
   const entities = { ...state.entities };
   const player = entities.player;
   if (player) entities.player = { ...player, hex: to };
+  const moved: GameState = {
+    ...state,
+    clock,
+    world: revealed,
+    party: { ...state.party, position: to },
+    entities,
+    campaign: { ...state.campaign, updatedAt: new Date().toISOString() },
+    rng: { seed: rngSnapshot.seed, state: rngSnapshot.state, cursor: rngSnapshot.cursor },
+  };
+  const targetPoi = revealed.pois.find((poi) => poi.hex.q === to.q && poi.hex.r === to.r);
+  const progressed = targetPoi ? progressQuests(moved, { kind: "reach", targetId: targetPoi.id }) : moved;
 
   return {
-    state: {
-      ...state,
-      clock,
-      world: revealed,
-      party: { ...state.party, position: to },
-      entities,
-      campaign: { ...state.campaign, updatedAt: new Date().toISOString() },
-      rng: { seed: rngSnapshot.seed, state: rngSnapshot.state, cursor: rngSnapshot.cursor },
-    },
+    state: progressed,
     path: route.path,
     cost: route.cost,
     minutes,

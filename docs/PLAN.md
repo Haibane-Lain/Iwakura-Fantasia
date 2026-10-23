@@ -1,7 +1,7 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** M2 character and content complete; M3 towns, NPCs, and quests next
-**Last updated:** 2026-10-23
+**Status:** M3 towns, NPCs, and quests complete; M4 battle next
+**Last updated:** 2026-10-24
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
 
@@ -946,16 +946,28 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Old M1 saves load fine: new entity fields have schema defaults and the sheet supplies a fallback appearance.
 - Not yet implemented: subclasses, feats, level-up UI, tool proficiencies, expertise, and manual rolled-stat assignment.
 
-### M3 — Town, NPCs, quests (stub)
+### M3 — Towns, NPCs, quests
 
-- [ ] Town local map, buildings, exits.
-- [ ] NPC entities, schedules, interaction prompts.
-- [ ] Dialogue panel with authored fallback lines.
-- [ ] Merchant UI, buy/sell.
-- [ ] Quest journal, authored quest state machine.
-- [ ] Dungeon local map + entrance transition.
+- [x] Town local map, buildings, exits.
+- [x] NPC entities, schedules, interaction prompts.
+- [x] Dialogue panel with authored fallback lines.
+- [x] Merchant UI, buy/sell.
+- [x] Quest journal, authored quest state machine.
+- [x] Dungeon local map + entrance transition.
 
-**Exit:** walk into town, talk, trade, accept a quest, enter a dungeon.
+**Exit:** walk into town, talk, trade, accept a quest, enter a dungeon. Achieved in the E2E.
+
+**M3 notes:**
+- Local maps use the same hex geometry and pathfinding as the world map, with a dedicated PixiJS local renderer for tiles, building doors, exits, interactables, NPCs, and hover paths.
+- Redford, Millbrook, and the Old Mill Crypt are authored maps. Procedural settlements and dungeons fall back to generic settlement/dungeon layouts; procedural towns include a generic road trader, Sable.
+- Seven authored NPCs have hour-granular schedules, roles, portraits, personas, and authored dialogue. Presence is derived from the campaign clock and local map spots.
+- Dialogue roots react to quest state (`default`, `questAvailable`, `questActive`, `questReady`, `questComplete`). Options can accept/claim quests, open shops, adjust relationships, wait, or end.
+- The free-speech AI hook assembles an NPC persona prompt with relationship, scene, and transcript, then streams an in-character reply through the local AI gateway. Only speech is shown; intent validation and state mutation remain M5.
+- Two authored quests: **The Mill That Stopped** and **The Greywatch Light**. Quest acceptance reveals reach targets on the world map; reach/interact objectives progress on travel, local entry, and interactions; turn-in grants gold and items.
+- The market tracks per-campaign stock. Buy/sell validates gold, stock, inventory, and equipped items, and updates the save.
+- Local time can be advanced with wait controls or an inn rest. Inn rest costs 1 gp and restores HP/Focus.
+- Dungeon encounter triggers set a persistent flag and show a warning; tactical resolution is M4.
+- Not yet implemented: enterable building interiors, minute-granular schedules, NPC pathing, crimes/reputation, branching quests, and quest templates.
 
 ### M4 — Battle
 
@@ -1119,7 +1131,8 @@ Create these as decisions are implemented:
 - M0: implemented, tested, packaged; only the live-key acceptance turn remains.
 - M1: implemented; procedural and handcrafted worlds generate, validate, render, travel, and save.
 - M2: implemented; characters are built, derived, equipped, inspected, rolled, and saved with the campaign.
-- Next: **M3 — Towns, NPCs, quests**.
+- M3: implemented; towns, NPC schedules, authored dialogue, merchants, quests, and the crypt are playable and saved.
+- Next: **M4 — Battle**.
 - Blockers: none.
 - Resolved: Electron 45 bundles Node 24.22, so `node:sqlite` works and `better-sqlite3` is unnecessary.
 - Resolved: Pixi 8 works under the strict CSP by importing `pixi.js/unsafe-eval`, which installs the non-eval polyfills.
