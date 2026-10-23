@@ -1,0 +1,36 @@
+{
+  "name": "iwakura-fantasia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A hex-based fantasy RPG with a deterministic engine and an AI narrative layer.",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @iwakura/desktop dev",
+    "build": "pnpm --filter @iwakura/desktop build",
+    "package": "pnpm --filter @iwakura/desktop package",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "pnpm --filter @iwakura/desktop build && playwright test",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.2",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "@tailwindcss/oxide"
+    ]
+  }
+}

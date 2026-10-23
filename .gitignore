@@ -1,0 +1,16 @@
+node_modules/
+out/
+dist/
+release/
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+*.db
+*.db-shm
+*.db-wal
+coverage/
+playwright-report/
+test-results/
+.dev/

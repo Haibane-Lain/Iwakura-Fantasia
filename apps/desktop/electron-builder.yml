@@ -1,0 +1,21 @@
+appId: ai.iwakura.fantasia
+productName: Iwakura Fantasia
+copyright: Copyright © 2026
+asar: true
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - "!node_modules/**/*"
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Iwakura Fantasia
