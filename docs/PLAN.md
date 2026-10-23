@@ -1,6 +1,6 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** M1 hex world complete; M2 character creation next
+**Status:** M2 character and content complete; M3 towns, NPCs, and quests next
 **Last updated:** 2026-10-23
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
@@ -897,7 +897,7 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - [x] AI debug panel v0: event stream, recent calls, tokens, cost, latency.
 - [x] Base UI shell, design tokens, screen router, main menu, AI Lab, settings, world-source placeholder.
 - [x] Vitest + Playwright Electron smoke test (navigation, keystore round-trip, missing-key UI).
-- [x] electron-builder packaging smoke test (unpacked Windows build, ~3.8 MB `app.asar` after Pixi assets).
+- [x] electron-builder packaging smoke test (unpacked Windows build, ~4 MB `app.asar` after Pixi and character assets).
 - [ ] Live acceptance: enter a valid OpenCode Go key, stream a test turn, verify usage and cost.
 
 **Exit:** packaged app launches; all checks pass except the live-key acceptance turn.
@@ -925,16 +925,26 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 
 ### M2 — Character and content
 
-- [ ] Content loader, validation, hot reload.
-- [ ] Ancestries: Human, Elf, Dwarf.
-- [ ] Classes: Fighter, Rogue, Wizard.
-- [ ] Backgrounds: Soldier, Scholar, Outlander.
-- [ ] Character creation wizard + derived preview.
-- [ ] Inventory, equipment, character sheet.
-- [ ] Skills/checks UI.
-- [ ] Procedural portrait/sigil.
+- [x] Content validation tests and Vite HMR for in-repo TS content. External world-pack hot reload is deferred.
+- [x] Ancestries: Human, Elf, Dwarf, with bonuses, traits, granted skills, and extra skill choices.
+- [x] Classes: Fighter, Rogue, Wizard, with hit die, saves, Focus, skill choices, and starting kits.
+- [x] Backgrounds: Soldier, Scholar, Outlander, with skills, hooks, and starting items.
+- [x] Character creation wizard + live derived preview.
+- [x] Inventory, equipment, character sheet, and equip/unequip actions.
+- [x] Skills/checks UI with deterministic rolls that advance the campaign RNG.
+- [x] Procedural portrait and sigil from a seed/palette.
 
-**Exit:** create a character, equip gear, see correct stats.
+**Exit:** create a character, equip gear, see correct stats. Achieved in the E2E.
+
+**M2 notes:**
+- Attribute modes: 27-point buy, standard array assignment, and rolled 4d6-drop-lowest auto-assigned by class priority.
+- Class skill choices exclude skills already granted by background or ancestry. Human gets one extra skill choice.
+- The starting kit combines background and class items, deduplicates them, and auto-equips the first weapon and armor.
+- AC derives from armor type and Dexterity; HP from class hit die and Constitution; Focus from class base plus the best primary attribute modifier.
+- The character sheet supports Overview, Inventory, and Skills tabs, equip/unequip, and per-skill d20 rolls. Rolls persist the updated RNG cursor with the campaign.
+- Portraits and sigils are pure SVG, seeded by the character appearance, so there is no external art dependency.
+- Old M1 saves load fine: new entity fields have schema defaults and the sheet supplies a fallback appearance.
+- Not yet implemented: subclasses, feats, level-up UI, tool proficiencies, expertise, and manual rolled-stat assignment.
 
 ### M3 — Town, NPCs, quests (stub)
 
@@ -1108,7 +1118,8 @@ Create these as decisions are implemented:
 - Decisions locked: 8/8.
 - M0: implemented, tested, packaged; only the live-key acceptance turn remains.
 - M1: implemented; procedural and handcrafted worlds generate, validate, render, travel, and save.
-- Next: **M2 — Character and content**.
+- M2: implemented; characters are built, derived, equipped, inspected, rolled, and saved with the campaign.
+- Next: **M3 — Towns, NPCs, quests**.
 - Blockers: none.
 - Resolved: Electron 45 bundles Node 24.22, so `node:sqlite` works and `better-sqlite3` is unnecessary.
 - Resolved: Pixi 8 works under the strict CSP by importing `pixi.js/unsafe-eval`, which installs the non-eval polyfills.
@@ -1116,7 +1127,7 @@ Create these as decisions are implemented:
 
 ### M0 implementation notes
 
-- The local Hono server and all of its dependencies are bundled into the Electron main process. `app.asar` is ~3.8 MB after Pixi and the world worker, and contains only `out/**` and `package.json`.
+- The local Hono server and all of its dependencies are bundled into the Electron main process. `app.asar` is ~4 MB after Pixi and the world worker, and contains only `out/**` and `package.json`.
 - The renderer never sees the API key. It receives only the loopback base URL and a per-launch bearer token from the preload bridge.
 - AI streaming consumes the SDK `fullStream` and handles `error`/`abort` parts explicitly. This avoids the unhandled `NoOutputGeneratedError` that the SDK's text/usage getters can raise when a provider fails before emitting text.
 - Model catalog calls use `Authorization`, `x-opencode-session`, and a custom user agent. Both the catalog and turns share the stable session identifier `iwakura:lab` for now; NPC turns will use `campaign:npc`.

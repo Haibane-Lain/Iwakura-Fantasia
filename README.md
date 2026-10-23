@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** M1 hex world complete. M2 (character creation) is next.
+**Status:** M2 character and content complete. M3 (towns, NPCs, quests) is next.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md)
 
@@ -26,14 +26,22 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Handcrafted world packs** with a sample region, Redford Reach, and the same runtime schema as generated worlds.
 - **PixiJS world map** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and click-to-travel.
 - **World time and campaign saves**: travel advances the clock, reveals fog, discovers landmarks, and persists through SQLite.
-- **Tests**: Vitest for hex/RNG/worldgen/AI prompt/server routes, and a Playwright Electron smoke test covering world creation, travel, save/continue, keystore round-trip, and the missing-key error path.
-- **Packaged Windows build** via electron-builder (`--dir` smoke test): 3.8 MB `app.asar`, no native modules.
+- **Character creation wizard**: 3 ancestries, 3 classes, 3 backgrounds, point buy, standard array, rolled 4d6 stats, class/background skill choices, appearance, portrait, sigil, name, and pronouns.
+- **Derived character rules**: ancestry bonuses, HP, AC, Focus, speed, proficiency, saves, skills, starting kit, auto-equipped weapon and armor.
+- **Character sheet** with Overview, Inventory, and Skills tabs, equip/unequip actions, and deterministic skill rolls that advance the campaign RNG.
+- **Procedural portraits and sigils** generated from a seed and palette, with no external art dependency.
+- **Tests**: Vitest for hex/RNG/worldgen/character/content/AI prompt/server routes (53 tests), and a Playwright Electron smoke test covering world creation, character creation, character sheet rolls, travel, save/continue, keystore round-trip, and the missing-key error path.
+- **Packaged Windows build** via electron-builder (`--dir` smoke test): under 4 MB `app.asar`, no native modules.
 
 ![AI Lab](docs/images/ai-lab.png)
 
 ![Redford Reach world map](docs/images/world-map.png)
 
 ![World generation](docs/images/world-setup.png)
+
+![Character creation](docs/images/character-creation.png)
+
+![Character sheet](docs/images/character-sheet.png)
 
 ---
 
@@ -49,9 +57,11 @@ pnpm dev
 Then:
 
 1. Open **New Campaign**.
-2. Choose **Procedural** or **Handcrafted**, generate a world, inspect the report, and press **Begin chronicle**.
-3. Drag to pan, scroll to zoom, and click a hex to travel. The clock, fog, discoveries, and save update automatically.
-4. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab.
+2. Choose **Procedural** or **Handcrafted**, generate a world, inspect the report, and press **Choose character**.
+3. Build a character through ancestry, class, background, attributes, skills, appearance, name, and review.
+4. Begin the chronicle. Drag to pan, scroll to zoom, and click a hex to travel. The clock, fog, discoveries, and save update automatically.
+5. Open the **Character** sheet to inspect stats, equipment, and roll skill checks.
+6. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab.
 
 Without a key, the world and saves still work. AI actions return a clear configuration error instead of blocking the UI.
 
@@ -152,7 +162,10 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Current limitations
 
-- Character creation, town/dungeon local maps, battle maps, NPC dialogue, quests, and companions are planned for M2–M6.
+- Town/dungeon local maps, battle maps, NPC dialogue, quests, companions, and romance are planned for M3–M6.
+- Character progression currently stops at level 1. Subclasses, feats, level-up UI, and level 5+ content are not implemented yet.
+- Standard array is assigned through six selects; rolled stats are auto-assigned by class priority. Drag-and-drop stat assignment and manual rolled assignment are deferred.
+- Class skill choices exclude skills already granted by background or ancestry. There are no expertise or tool proficiencies yet.
 - The world map renders terrain in batched PixiJS layers rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
 - The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred to M3.
 - The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.
@@ -164,10 +177,10 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ---
 
-## Next milestone: M2 — Character and content
+## Next milestone: M3 — Towns, NPCs, quests
 
-- Ancestry, class, and background selection.
-- Point buy, standard array, and seeded rolling.
-- Derived stats, skills, inventory, and equipment.
-- Character sheet UI and the first procedural portrait/sigil.
-- Character state integrated with world travel and campaign saves.
+- Town and dungeon local maps built on the same hex renderer.
+- NPC placement, schedules, and interaction prompts.
+- Authored dialogue fallback, merchant trade, and quest state machines.
+- Local navigation, building interiors, and dungeon encounter triggers.
+- The first town-level AI hooks, ahead of the full NPC pipeline in M5.

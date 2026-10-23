@@ -1,6 +1,5 @@
 import { HANDCRAFTED_WORLDS } from "@iwakura/content";
 import type { WorldGenParams, WorldGenRequest, WorldGenResult } from "@iwakura/contracts";
-import { createGameState } from "@iwakura/engine";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -86,8 +85,7 @@ function ReportList({ title, items, tone }: { title: string; items: string[]; to
 export function NewCampaign() {
   const setScreen = useAppStore((state) => state.setScreen);
   const campaign = useAppStore((state) => state.campaign);
-  const appSettings = useAppStore((state) => state.settings);
-  const saveCampaign = useAppStore((state) => state.saveCampaign);
+  const setPendingWorld = useAppStore((state) => state.setPendingWorld);
 
   const [source, setSource] = useState<"procedural" | "handcrafted">("procedural");
   const [seed, setSeed] = useState(randomSeed);
@@ -95,7 +93,6 @@ export function NewCampaign() {
   const [packId, setPackId] = useState(HANDCRAFTED_WORLDS[0]?.id ?? "core:redford_reach");
   const [result, setResult] = useState<WorldGenResult | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [beginning, setBeginning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const didAutoGenerate = useRef(false);
 
@@ -142,7 +139,7 @@ export function NewCampaign() {
     }
   };
 
-  const begin = async () => {
+  const begin = () => {
     if (!result || result.report.errors.length > 0) return;
     if (
       campaign &&
@@ -150,30 +147,8 @@ export function NewCampaign() {
     ) {
       return;
     }
-    setBeginning(true);
-    setError(null);
-    try {
-      const state = createGameState({
-        world: result.world,
-        settings: {
-          worldSource: result.world.source,
-          worldPackId: result.world.packId,
-          seed: result.world.seed,
-          genParams: params,
-          difficulty: appSettings?.settings.difficulty ?? "normal",
-          contentRating: appSettings?.settings.contentRating ?? "teen",
-          aiEnabled: appSettings?.settings.ai.aiEnabled ?? true,
-        },
-        campaignId: crypto.randomUUID(),
-        campaignName: result.world.name,
-      });
-      await saveCampaign(state);
-      setScreen("world");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setBeginning(false);
-    }
+    setPendingWorld(result, params);
+    setScreen("character");
   };
 
   const updateParam = <K extends keyof WorldGenParams>(key: K, value: WorldGenParams[K]) => {
@@ -209,8 +184,7 @@ export function NewCampaign() {
           <div className="mt-5 flex items-start gap-2 border border-gold/30 bg-gold/[0.04] px-3 py-2 text-[11px] leading-5 text-parchment-dim">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-gold" />
             Starting a new chronicle replaces <span className="text-parchment">{campaign.campaign.name}</span>
-            . The current save will be overwritten when you press{" "}
-            <span className="text-parchment">Begin chronicle</span>.
+            . The current save will be overwritten when you finish creating your character.
           </div>
         ) : null}
 
@@ -557,15 +531,11 @@ export function NewCampaign() {
                   <button
                     type="button"
                     className="btn btn-primary flex-1"
-                    onClick={() => void begin()}
-                    disabled={!result.report.passed || beginning}
+                    onClick={begin}
+                    disabled={!result.report.passed}
                   >
-                    {beginning ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="size-3.5" />
-                    )}
-                    {beginning ? "Opening the chronicle…" : "Begin chronicle"}
+                    <Sparkles className="size-3.5" />
+                    Choose character
                   </button>
                   <button type="button" className="btn" onClick={() => void generate()} disabled={generating}>
                     <Hammer className="size-3.5" />

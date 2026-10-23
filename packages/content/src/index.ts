@@ -1,5 +1,6 @@
 import type { Ability, Ancestry, Background, CharacterClass, Item } from "@iwakura/contracts";
 
+export * from "./appearance.js";
 export * from "./terrains.js";
 export * from "./worlds.js";
 
@@ -137,6 +138,8 @@ export const ANCESTRIES: Ancestry[] = [
       },
     ],
     movement: 6,
+    grantedSkillIds: [],
+    extraSkillChoices: 1,
     playable: true,
   },
   {
@@ -158,6 +161,8 @@ export const ANCESTRIES: Ancestry[] = [
       },
     ],
     movement: 6,
+    grantedSkillIds: ["perception"],
+    extraSkillChoices: 0,
     playable: true,
   },
   {
@@ -183,6 +188,8 @@ export const ANCESTRIES: Ancestry[] = [
       },
     ],
     movement: 5,
+    grantedSkillIds: [],
+    extraSkillChoices: 0,
     playable: true,
   },
 ];
@@ -200,6 +207,9 @@ export const CLASSES: CharacterClass[] = [
     armorProficiency: ["light", "medium", "heavy", "shield"],
     weaponProficiency: ["simple", "martial"],
     startingAbilityIds: ["core:power_strike", "core:second_wind"],
+    startingItemIds: ["core:longsword", "core:leather_armor"],
+    skillChoices: ["athletics", "intimidation", "survival", "perception"],
+    skillChoiceCount: 2,
     playable: true,
   },
   {
@@ -214,6 +224,9 @@ export const CLASSES: CharacterClass[] = [
     armorProficiency: ["light"],
     weaponProficiency: ["simple", "finesse", "ranged"],
     startingAbilityIds: ["core:sneak_attack", "core:cunning_action"],
+    startingItemIds: ["core:dagger", "core:leather_armor"],
+    skillChoices: ["stealth", "sleight_of_hand", "deception", "investigation"],
+    skillChoiceCount: 2,
     playable: true,
   },
   {
@@ -228,6 +241,9 @@ export const CLASSES: CharacterClass[] = [
     armorProficiency: [],
     weaponProficiency: ["simple"],
     startingAbilityIds: ["core:firebolt", "core:shield"],
+    startingItemIds: ["core:staff", "core:healing_potion"],
+    skillChoices: ["arcana", "history", "investigation", "insight"],
+    skillChoiceCount: 2,
     playable: true,
   },
 ];
@@ -332,6 +348,10 @@ export function getBackground(id: string): Background | undefined {
 
 export function getAbility(id: string): Ability | undefined {
   return ABILITIES.find((entry) => entry.id === id);
+}
+
+export function getSkill(id: string): (typeof SKILLS)[number] | undefined {
+  return SKILLS.find((entry) => entry.id === id);
 }
 
 export function getItem(id: string): Item | undefined {

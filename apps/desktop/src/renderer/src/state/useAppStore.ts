@@ -1,8 +1,16 @@
-import type { Bootstrap, GameState, HealthResponse, ModelInfo, SettingsResponse } from "@iwakura/contracts";
+import type {
+  Bootstrap,
+  GameState,
+  HealthResponse,
+  ModelInfo,
+  SettingsResponse,
+  WorldGenParams,
+  WorldGenResult,
+} from "@iwakura/contracts";
 import { create } from "zustand";
 import { ApiClient } from "../api/client";
 
-export type Screen = "menu" | "campaign" | "world" | "lab" | "settings";
+export type Screen = "menu" | "campaign" | "character" | "world" | "lab" | "settings";
 export type CampaignSaveState = "idle" | "saving" | "saved" | "error";
 
 // Serialize campaign writes so a rapid sequence of travels can never finish
@@ -20,6 +28,8 @@ interface AppStore {
   campaign: GameState | null;
   campaignUpdatedAt: string | null;
   campaignSaveState: CampaignSaveState;
+  pendingWorld: WorldGenResult | null;
+  pendingWorldParams: WorldGenParams | null;
   loading: boolean;
   bootError: string | null;
   setScreen: (screen: Screen) => void;
@@ -31,6 +41,8 @@ interface AppStore {
   setCampaign: (campaign: GameState) => void;
   saveCampaign: (campaign: GameState) => Promise<void>;
   clearCampaign: () => Promise<void>;
+  setPendingWorld: (result: WorldGenResult, params: WorldGenParams) => void;
+  clearPendingWorld: () => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -44,6 +56,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   campaign: null,
   campaignUpdatedAt: null,
   campaignSaveState: "idle",
+  pendingWorld: null,
+  pendingWorldParams: null,
   loading: true,
   bootError: null,
 
@@ -63,11 +77,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
         api.getCampaign(),
       ]);
       const hash = window.location.hash.replace(/^#/, "");
-      const requestedScreen: Screen = ["menu", "campaign", "world", "lab", "settings"].includes(hash)
+      const requestedScreen: Screen = ["menu", "campaign", "character", "world", "lab", "settings"].includes(
+        hash,
+      )
         ? (hash as Screen)
         : "menu";
       const initialScreen: Screen =
-        requestedScreen === "world" && !saved.campaign ? "campaign" : requestedScreen;
+        (requestedScreen === "world" && !saved.campaign) ||
+        (requestedScreen === "character" && !get().pendingWorld)
+          ? "campaign"
+          : requestedScreen;
       set({
         api,
         bootstrap,
@@ -142,4 +161,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     await api.clearCampaign();
     set({ campaign: null, campaignUpdatedAt: null, campaignSaveState: "idle" });
   },
+
+  setPendingWorld: (result, params) => set({ pendingWorld: result, pendingWorldParams: params }),
+
+  clearPendingWorld: () => set({ pendingWorld: null, pendingWorldParams: null }),
 }));

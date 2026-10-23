@@ -1,5 +1,5 @@
 import clsx, { type ClassValue } from "clsx";
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 export function cn(...inputs: ClassValue[]): string {
   return clsx(inputs);
@@ -9,12 +9,17 @@ export function Panel({
   children,
   className,
   lit = false,
+  ...rest
 }: {
   children: ReactNode;
   className?: string;
   lit?: boolean;
-}) {
-  return <div className={cn("panel grain", lit && "panel-lit", className)}>{children}</div>;
+} & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn("panel grain", lit && "panel-lit", className)} {...rest}>
+      {children}
+    </div>
+  );
 }
 
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {

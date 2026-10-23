@@ -2,6 +2,7 @@ import { AlertTriangle, Hexagon, RefreshCw } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { AppHeader } from "./components/AppHeader";
 import { AiLab } from "./screens/AiLab";
+import { CharacterCreation } from "./screens/CharacterCreation";
 import { MainMenu } from "./screens/MainMenu";
 import { NewCampaign } from "./screens/NewCampaign";
 import { SettingsScreen } from "./screens/SettingsScreen";
@@ -55,6 +56,7 @@ export default function App() {
   const loading = useAppStore((state) => state.loading);
   const bootError = useAppStore((state) => state.bootError);
   const campaign = useAppStore((state) => state.campaign);
+  const pendingWorld = useAppStore((state) => state.pendingWorld);
   const init = useAppStore((state) => state.init);
   const started = useRef(false);
 
@@ -73,6 +75,7 @@ export default function App() {
       <main className="min-h-0 flex-1">
         {screen === "menu" ? <MainMenu /> : null}
         {screen === "campaign" ? <NewCampaign /> : null}
+        {screen === "character" ? pendingWorld ? <CharacterCreation /> : <NewCampaign /> : null}
         {screen === "world" ? campaign ? <WorldScreen /> : <NewCampaign /> : null}
         {screen === "lab" ? <AiLab /> : null}
         {screen === "settings" ? <SettingsScreen /> : null}

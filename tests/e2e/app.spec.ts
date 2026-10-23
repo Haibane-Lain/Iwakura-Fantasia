@@ -5,7 +5,7 @@ import { _electron as electron, expect, test } from "@playwright/test";
 const appDir = resolve(process.cwd(), "apps/desktop");
 const electronPath = resolve(appDir, "node_modules/electron/dist/electron.exe");
 
-test("launches the shell, creates a world, travels, and navigates the M1 screens", async () => {
+test("creates a character, explores Redford Reach, saves, and navigates the M2 screens", async () => {
   expect(existsSync(electronPath), "Electron binary is installed").toBe(true);
   expect(
     existsSync(resolve(appDir, "out/main/index.js")),
@@ -37,15 +37,39 @@ test("launches the shell, creates a world, travels, and navigates the M1 screens
     await window.getByRole("button", { name: /Handcrafted/ }).click();
     await window.getByRole("button", { name: "Generate world" }).click();
     await expect(window.getByText(/Redford Reach passed all hard checks/)).toBeVisible({ timeout: 15_000 });
+    await window.getByRole("button", { name: "Choose character" }).click();
+
+    // Character creation: Dwarf Fighter Soldier, default point buy.
+    await expect(window.getByRole("heading", { name: "Shape a Wanderer" })).toBeVisible();
+    await window.getByRole("button", { name: /Dwarf/ }).click();
+    await window.getByRole("button", { name: "Next" }).click();
+    await window.getByRole("button", { name: /Fighter/ }).click();
+    await window.getByRole("button", { name: "Next" }).click();
+    await window.getByRole("button", { name: /Soldier/ }).click();
+    await window.getByRole("button", { name: "Next" }).click();
+    await window.getByRole("button", { name: "Next" }).click();
+    await window.getByRole("button", { name: "Next" }).click();
+    await window.getByRole("button", { name: "Next" }).click();
+    await window.locator("#character-name").fill("Ardan Vell");
+    await window.getByRole("button", { name: "Next" }).click();
     await window.getByRole("button", { name: "Begin chronicle" }).click();
 
     await expect(window.getByText("Selected hex").first()).toBeVisible({ timeout: 10_000 });
     await expect(window.getByText("Nearby landmarks").first()).toBeVisible();
     await expect(window.locator("canvas").first()).toBeVisible();
 
+    // The character sheet exposes derived stats, equipment, and skill rolls.
+    await window.getByRole("button", { name: "Character" }).click();
+    await expect(window.getByRole("heading", { name: "Ardan Vell" })).toBeVisible();
+    await window.getByRole("button", { name: "Skills" }).click();
+    await expect(window.getByText("Athletics").first()).toBeVisible();
+    await window.getByRole("button", { name: "Roll" }).first().click();
+    await expect(window.getByText(/d20 \d+/).first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
+
     await window.getByRole("button", { name: /Millbrook/ }).click();
     await window.getByRole("button", { name: "Travel" }).click();
-    await expect(window.getByText(/Travelled \d+ hexes/)).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByText("The party is here.").first()).toBeVisible({ timeout: 10_000 });
     await window.getByRole("button", { name: "Save now" }).click();
     await expect(window.getByText(/^Saved /).first()).toBeVisible({ timeout: 10_000 });
 

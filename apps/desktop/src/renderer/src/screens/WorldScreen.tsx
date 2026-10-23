@@ -20,9 +20,11 @@ import {
   Menu,
   Save,
   Sparkles,
+  UserRound,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { CharacterSheet } from "../components/CharacterSheet";
 import { cn, Panel, SectionLabel, StatusDot } from "../components/ui";
 import { WorldCanvas } from "../components/WorldCanvas";
 import { useAppStore } from "../state/useAppStore";
@@ -40,6 +42,7 @@ export function WorldScreen() {
 
   const [selectedHex, setSelectedHex] = useState<Hex | null>(campaign?.party.position ?? null);
   const [toast, setToast] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     if (!campaign) setScreen("campaign");
@@ -69,6 +72,7 @@ export function WorldScreen() {
 
   const world = campaign.world;
   const party = campaign.party;
+  const player = campaign.entities.player;
   const currentTerrain = getTerrain(terrainAt(world, party.position));
 
   const travel = (hex: Hex) => {
@@ -135,6 +139,16 @@ export function WorldScreen() {
             <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
               {world.name} · seed {world.seed}
             </div>
+            {player ? (
+              <button
+                type="button"
+                className="mt-1 flex items-center gap-1.5 text-[9px] uppercase tracking-[0.1em] text-gold/70 hover:text-gold-bright"
+                onClick={() => setSheetOpen(true)}
+              >
+                <UserRound className="size-2.5" />
+                {player.name} · HP {player.hp.current}/{player.hp.max} · AC {player.ac}
+              </button>
+            ) : null}
           </div>
         </Panel>
 
@@ -182,6 +196,9 @@ export function WorldScreen() {
             </span>
             <span>
               hex {party.position.q}, {party.position.r}
+            </span>
+            <span className="text-parchment-dim">
+              {player?.name ?? "Wanderer"} · level {player?.level ?? 1}
             </span>
           </div>
         </Panel>
@@ -323,6 +340,10 @@ export function WorldScreen() {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className="btn px-3! py-1.5!" onClick={() => setSheetOpen(true)}>
+              <UserRound className="size-3.5" />
+              Character
+            </button>
             <button type="button" className="btn px-3! py-1.5!" onClick={() => void saveCampaign(campaign)}>
               <Save className="size-3.5" />
               Save now
@@ -356,6 +377,8 @@ export function WorldScreen() {
           {toast.text}
         </div>
       ) : null}
+
+      {sheetOpen ? <CharacterSheet onClose={() => setSheetOpen(false)} /> : null}
     </div>
   );
 }

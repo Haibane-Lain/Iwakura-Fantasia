@@ -160,6 +160,34 @@ export const InventoryEntrySchema = z.object({
 });
 export type InventoryEntry = z.infer<typeof InventoryEntrySchema>;
 
+export const CharacterAppearanceSchema = z.object({
+  palette: z.string().min(1).max(40),
+  sigil: z.string().min(1).max(40),
+  seed: z.string().min(1).max(80),
+});
+export type CharacterAppearance = z.infer<typeof CharacterAppearanceSchema>;
+
+export const EquipmentSchema = z.object({
+  mainHand: ContentIdSchema.optional(),
+  offHand: ContentIdSchema.optional(),
+  armor: ContentIdSchema.optional(),
+  accessory1: ContentIdSchema.optional(),
+  accessory2: ContentIdSchema.optional(),
+});
+export type Equipment = z.infer<typeof EquipmentSchema>;
+
+export const CharacterBuildSchema = z.object({
+  name: z.string().min(1).max(60),
+  pronouns: z.string().min(1).max(30).default("they/them"),
+  ancestryId: ContentIdSchema,
+  classId: ContentIdSchema,
+  backgroundId: ContentIdSchema,
+  baseAttributes: AttributesSchema,
+  skillIds: z.array(z.string().min(1)).min(2),
+  appearance: CharacterAppearanceSchema,
+});
+export type CharacterBuild = z.infer<typeof CharacterBuildSchema>;
+
 export const EntityKindSchema = z.enum(["player", "npc", "companion", "enemy", "object"]);
 export type EntityKind = z.infer<typeof EntityKindSchema>;
 
@@ -167,6 +195,7 @@ export const EntitySchema = z.object({
   id: z.string().min(1),
   kind: EntityKindSchema,
   name: z.string().min(1).max(80),
+  pronouns: z.string().max(30).default("they/them"),
   description: z.string().max(2000).default(""),
   ancestryId: ContentIdSchema.optional(),
   classId: ContentIdSchema.optional(),
@@ -180,6 +209,9 @@ export const EntitySchema = z.object({
   conditions: z.array(ConditionIdSchema).default([]),
   abilityIds: z.array(ContentIdSchema).default([]),
   inventory: z.array(InventoryEntrySchema).default([]),
+  equipment: EquipmentSchema.default({}),
+  skillIds: z.array(z.string().min(1)).default([]),
+  appearance: CharacterAppearanceSchema.optional(),
   factionId: z.string().optional(),
   hex: HexSchema.optional(),
   recruitable: z.boolean().default(false),

@@ -1,16 +1,18 @@
 import { getTerrain, isWaterTerrain } from "@iwakura/content";
 import type {
   CampaignSettings,
+  CharacterBuild,
   Clock,
-  Entity,
   GameState,
   Hex,
   PointOfInterest,
   WorldState,
 } from "@iwakura/contracts";
+import { createPlayerEntity, defaultCharacterBuild } from "./character.js";
 import { axialIndex, hexesInWorldRadius } from "./grid.js";
 import { distance, findPath, hexKey, spiral } from "./hex.js";
-import { createRng, Rng } from "./rng.js";
+import { createRng } from "./rng.js";
+import { rngFromGameState } from "./state-rng.js";
 
 export function terrainAt(world: WorldState, h: Hex): string {
   const index = axialIndex(world.width, world.height, h);
@@ -107,6 +109,7 @@ export interface CreateGameStateOptions {
   settings: CampaignSettings;
   campaignId: string;
   campaignName: string;
+  build?: CharacterBuild;
   playerName?: string;
   now?: Date;
 }
@@ -117,34 +120,8 @@ export function createGameState(options: CreateGameStateOptions): GameState {
   const rng = createRng(`campaign:${options.world.seed}`);
   const snapshot = rng.snapshot();
   const now = options.now ?? new Date();
-  const playerName = options.playerName ?? "Wanderer";
-
-  const player: Entity = {
-    id: "player",
-    kind: "player",
-    name: playerName,
-    description: "A traveller with a blade, a purse, and no good reason to be here.",
-    ancestryId: "core:human",
-    classId: "core:fighter",
-    backgroundId: "core:soldier",
-    level: 1,
-    attributes: { str: 14, dex: 12, con: 13, int: 10, wis: 11, cha: 9 },
-    hp: { current: 20, max: 20 },
-    ac: 13,
-    speed: 6,
-    focus: { current: 6, max: 6 },
-    conditions: [],
-    abilityIds: ["core:power_strike", "core:second_wind"],
-    inventory: [
-      { itemId: "core:longsword", quantity: 1 },
-      { itemId: "core:leather_armor", quantity: 1 },
-      { itemId: "core:healing_potion", quantity: 1 },
-    ],
-    hex: start,
-    recruitable: false,
-    companion: false,
-    tags: ["player"],
-  };
+  const build = options.build ?? defaultCharacterBuild(options.playerName ?? "Wanderer");
+  const player = { ...createPlayerEntity(build), hex: start };
 
   return {
     version: 1,
@@ -182,16 +159,6 @@ export interface MoveResult {
   encounter: boolean;
 }
 
-function rngForState(state: GameState): Rng {
-  const snapshot = state.rng;
-  if (snapshot.state !== undefined) {
-    return Rng.fromSnapshot({ seed: snapshot.seed, state: snapshot.state, cursor: snapshot.cursor });
-  }
-  const rng = createRng(snapshot.seed);
-  for (let i = 0; i < snapshot.cursor; i += 1) rng.nextUint32();
-  return rng;
-}
-
 export function moveParty(state: GameState, to: Hex): MoveResult | null {
   if (state.party.position.q === to.q && state.party.position.r === to.r) return null;
   const route = pathBetween(state.world, state.party.position, to);
@@ -201,7 +168,7 @@ export function moveParty(state: GameState, to: Hex): MoveResult | null {
   const minutes = Math.max(10, route.cost * 10);
   const clock = advanceClock(state.clock, minutes);
   const revealed = revealFog(state.world, to, 5);
-  const rng = rngForState(state);
+  const rng = rngFromGameState(state);
   const danger = state.campaign.settings.genParams.danger;
   const encounterChance = danger === "deadly" ? 0.18 : danger === "peaceful" ? 0.02 : 0.08;
   const encounter = rng.chance(encounterChance);

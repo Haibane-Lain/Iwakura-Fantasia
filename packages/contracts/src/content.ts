@@ -37,6 +37,8 @@ export const AncestrySchema = z.object({
   bonuses: AttributeBonusesSchema,
   traits: z.array(TraitSchema).min(1),
   movement: z.number().int().min(3).max(10).default(6),
+  grantedSkillIds: z.array(z.string()).default([]),
+  extraSkillChoices: z.number().int().min(0).max(2).default(0),
   playable: z.boolean().default(true),
 });
 export type Ancestry = z.infer<typeof AncestrySchema>;
@@ -53,6 +55,9 @@ export const CharacterClassSchema = z.object({
   armorProficiency: z.array(z.enum(["light", "medium", "heavy", "shield"])),
   weaponProficiency: z.array(z.enum(["simple", "martial", "ranged", "finesse"])),
   startingAbilityIds: z.array(ContentIdSchema).min(1),
+  startingItemIds: z.array(ContentIdSchema).default([]),
+  skillChoices: z.array(z.string()).default([]),
+  skillChoiceCount: z.number().int().min(0).max(4).default(2),
   playable: z.boolean().default(true),
 });
 export type CharacterClass = z.infer<typeof CharacterClassSchema>;
