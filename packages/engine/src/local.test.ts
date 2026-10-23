@@ -191,7 +191,10 @@ describe("dialogues, quests, and trade", () => {
     const moved = moveLocalParty(state, ledger.hex);
     expect(moved).not.toBeNull();
     expect(moved!.encounter?.id).toBe("core:crypt_shades");
-    const interacted = interactLocal(moved!.state, "core:crypt_ledger");
+    expect(moved!.state.local?.position).not.toEqual(ledger.hex);
+    const reached = moveLocalParty(moved!.state, ledger.hex);
+    expect(reached).not.toBeNull();
+    const interacted = interactLocal(reached!.state, "core:crypt_ledger");
     expect(interacted).not.toBeNull();
     expect(interacted!.state.quests["core:the_stopped_mill"]?.objectives[1]?.complete).toBe(true);
     expect(

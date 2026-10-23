@@ -342,28 +342,38 @@ export function moveLocalParty(state: GameState, to: Hex): LocalMoveResult | nul
   if (!localIsWalkable(local.map, to)) return null;
   const route = findPath(local.position, to, (h) => (localIsWalkable(local.map, h) ? 1 : null));
   if (!route) return null;
-  const minutes = Math.max(1, route.path.length * 2);
+  let steps = route.path;
+  let encounter: (typeof local.map.encounters)[number] | undefined;
+  const encounterFlags = { ...local.encounterFlags };
+  for (let index = 0; index < route.path.length; index += 1) {
+    const step = route.path[index]!;
+    const found = local.map.encounters.find(
+      (entry) => !encounterFlags[entry.id] && distance(entry.hex, step) <= entry.radius,
+    );
+    if (!found) continue;
+    encounter = found;
+    encounterFlags[found.id] = true;
+    steps = route.path.slice(0, index + 1);
+    break;
+  }
+  const destination = steps[steps.length - 1] ?? to;
+  const minutes = Math.max(1, steps.length * 2);
   const player = state.entities.player;
-  const encounter = local.map.encounters.find(
-    (entry) =>
-      !local.encounterFlags[entry.id] && route.path.some((step) => distance(entry.hex, step) <= entry.radius),
-  );
-  const encounterFlags = encounter ? { ...local.encounterFlags, [encounter.id]: true } : local.encounterFlags;
   const entities = player
     ? {
         ...state.entities,
-        player: { ...player, hex: to, localMapId: local.map.id },
+        player: { ...player, hex: destination, localMapId: local.map.id },
       }
     : state.entities;
   return {
     state: {
       ...state,
-      local: { ...local, position: to, encounterFlags },
+      local: { ...local, position: destination, encounterFlags },
       entities,
       clock: advanceClock(state.clock, minutes),
       campaign: updated(state),
     },
-    path: route.path,
+    path: steps,
     minutes,
     ...(encounter ? { encounter } : {}),
   };

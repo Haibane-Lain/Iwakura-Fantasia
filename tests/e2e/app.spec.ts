@@ -131,6 +131,7 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
     await window.getByRole("button", { name: "Return to the road" }).click();
     await expect(window.getByText("Points of interest").first()).toBeVisible({ timeout: 10_000 });
 
+    await window.getByRole("button", { name: "Walk to Mill ledger" }).click();
     await expect(window.getByRole("button", { name: "Examine Mill ledger" }).first()).toBeVisible({
       timeout: 10_000,
     });
