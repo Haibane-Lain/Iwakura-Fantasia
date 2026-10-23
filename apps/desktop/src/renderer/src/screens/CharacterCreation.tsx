@@ -617,7 +617,9 @@ export function CharacterCreation() {
                                 {ATTR_LABELS[key]}
                               </div>
                               <div className="text-[9px] uppercase tracking-[0.1em] text-faint">
-                                {formatBonuses({ [key]: ancestry.bonuses[key] ?? 0 })} ancestry
+                                {ancestry.bonuses[key]
+                                  ? `${formatModifier(ancestry.bonuses[key]!)} ancestry`
+                                  : "no ancestry bonus"}
                               </div>
                             </div>
                             <div className="text-right">
