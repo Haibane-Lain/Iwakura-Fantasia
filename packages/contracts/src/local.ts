@@ -2,7 +2,7 @@ import { z } from "zod";
 import { NpcPersonaSchema } from "./ai.js";
 import { ContentIdSchema } from "./content.js";
 
-export const LocalMapKindSchema = z.enum(["town", "village", "dungeon"]);
+export const LocalMapKindSchema = z.enum(["town", "village", "dungeon", "wilderness"]);
 export type LocalMapKind = z.infer<typeof LocalMapKindSchema>;
 
 export const LocalPointSchema = z.object({
@@ -37,7 +37,9 @@ export const LocalExitDefinitionSchema = z.object({
   name: z.string().min(1),
   point: LocalPointSchema,
   description: z.string().default(""),
-  target: z.enum(["world"]).default("world"),
+  target: z.enum(["world", "travel"]).default("world"),
+  /** World-hex direction for travel-map edge gates. */
+  direction: z.number().int().min(0).max(5).optional(),
 });
 export type LocalExitDefinition = z.infer<typeof LocalExitDefinitionSchema>;
 

@@ -104,10 +104,23 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
       .getByRole("button", { name: /Leave via South Road/ })
       .first()
       .click();
+    await expect(window.getByText("Travel Map").first()).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByText("Road edges").first()).toBeVisible();
+    await expect(window.getByText("WASD", { exact: true }).first()).toBeVisible();
+    await window.keyboard.down("d");
+    await window.waitForTimeout(550);
+    await window.keyboard.up("d");
+    await expect(window.getByText("People here").first()).toBeVisible({ timeout: 10_000 });
+    await window
+      .getByRole("button", { name: /Leave via South Road/ })
+      .first()
+      .click();
+    await expect(window.getByText("Travel Map").first()).toBeVisible({ timeout: 10_000 });
+    await window.getByRole("button", { name: "Atlas" }).click();
     await expect(window.getByText("Nearby landmarks").first()).toBeVisible();
     await window.getByRole("button", { name: /The Old Mill Crypt/ }).click();
-    await window.getByRole("button", { name: "Travel" }).click();
-    await expect(window.getByText("The party is here.").first()).toBeVisible({ timeout: 20_000 });
+    await window.getByRole("button", { name: "Fast travel" }).click();
+    await expect(window.getByText("Travel Map").first()).toBeVisible({ timeout: 20_000 });
     await window.getByRole("button", { name: "Enter The Old Mill Crypt" }).click();
     await expect(window.getByText("The Old Mill Crypt").first()).toBeVisible({ timeout: 10_000 });
 
@@ -146,13 +159,17 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
       .getByRole("button", { name: /Leave via Stairs to the surface/ })
       .first()
       .click();
+    await expect(window.getByText("Travel Map").first()).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByText("Road edges").first()).toBeVisible();
+    await expect(window.getByText("WASD", { exact: true }).first()).toBeVisible();
+    await window.getByRole("button", { name: "Atlas" }).click();
     await expect(window.getByText("Nearby landmarks").first()).toBeVisible();
     await window
       .getByRole("button", { name: /Redford/ })
       .first()
       .click();
-    await window.getByRole("button", { name: "Travel" }).click();
-    await expect(window.getByText("The party is here.").first()).toBeVisible({ timeout: 20_000 });
+    await window.getByRole("button", { name: "Fast travel" }).click();
+    await expect(window.getByText("Travel Map").first()).toBeVisible({ timeout: 20_000 });
     await window.getByRole("button", { name: "Enter Redford" }).click();
     await expect(window.getByText("People here")).toBeVisible();
     await window

@@ -4,8 +4,9 @@ import { useAppStore } from "../state/useAppStore";
 import { Panel, SectionLabel } from "./ui";
 
 const CONTROLS = [
-  ["World map", "Drag to pan · scroll to zoom · click a hex to travel"],
-  ["Local map", "Click a reachable hex to walk · use People, Buildings, and Points of interest"],
+  ["Travel Map", "WASD move · Shift run · walk through gates and road edges · scroll to zoom"],
+  ["Atlas", "Drag to pan · inspect roads and landmarks · fast travel on known routes"],
+  ["Local map", "Click a reachable hex to walk · step onto an exit to return to the road"],
   ["Dialogue", "Choose authored lines or ask the AI · Esc closes the conversation"],
   ["Battle", "Click a reachable hex to move · select an enemy · Attack or use an ability"],
   ["Journal", "Track objectives, rumors, faction standing, and the chronicle recap"],
@@ -17,6 +18,7 @@ const SYSTEMS = [
   ["Saves", "Autosave writes the active chronicle. Slots are manual snapshots in Settings."],
   ["AI", "The narrator proposes speech and intents. The engine validates every state change."],
   ["Companions", "Recruitable NPCs travel with you, fight on their turns, and react to choices."],
+  ["Travel", "Each world hex unfolds into a detailed field map. Visible threats start combat on contact."],
   ["Content", "Teen fades romance to black; mature changes tone, not rules."],
 ];
 

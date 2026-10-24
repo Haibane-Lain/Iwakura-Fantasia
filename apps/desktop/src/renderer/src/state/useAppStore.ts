@@ -12,6 +12,7 @@ import { ApiClient } from "../api/client";
 
 export type Screen = "menu" | "campaign" | "character" | "world" | "lab" | "settings";
 export type CampaignSaveState = "idle" | "saving" | "saved" | "error";
+export type WorldMode = "atlas" | "travel";
 
 // Serialize campaign writes so a rapid sequence of travels can never finish
 // out of order and restore an older position.
@@ -31,9 +32,11 @@ interface AppStore {
   pendingWorld: WorldGenResult | null;
   pendingWorldParams: WorldGenParams | null;
   helpOpen: boolean;
+  worldMode: WorldMode;
   loading: boolean;
   bootError: string | null;
   setScreen: (screen: Screen) => void;
+  setWorldMode: (mode: WorldMode) => void;
   init: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshModels: (refresh?: boolean) => Promise<void>;
@@ -61,10 +64,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   pendingWorld: null,
   pendingWorldParams: null,
   helpOpen: false,
+  worldMode: "atlas",
   loading: true,
   bootError: null,
 
   setScreen: (screen) => set({ screen }),
+  setWorldMode: (mode) => set({ worldMode: mode }),
 
   init: async () => {
     try {
@@ -102,6 +107,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         loading: false,
         bootError: null,
         screen: initialScreen,
+        worldMode: saved.campaign?.travel ? "travel" : "atlas",
       });
     } catch (error) {
       set({
@@ -139,6 +145,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       campaign,
       campaignUpdatedAt: campaign.campaign.updatedAt,
       campaignSaveState: "idle",
+      worldMode: campaign.travel ? "travel" : "atlas",
     }),
 
   saveCampaign: async (campaign) => {
@@ -162,7 +169,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const api = get().api;
     if (!api) return;
     await api.clearCampaign();
-    set({ campaign: null, campaignUpdatedAt: null, campaignSaveState: "idle" });
+    set({ campaign: null, campaignUpdatedAt: null, campaignSaveState: "idle", worldMode: "atlas" });
   },
 
   setPendingWorld: (result, params) => set({ pendingWorld: result, pendingWorldParams: params }),

@@ -3,8 +3,9 @@ import type { Hex } from "@iwakura/contracts";
 import {
   battleEnemiesForEncounter,
   enterLocalMap,
+  enterTravelMap,
+  fastTravel,
   formatClock,
-  moveParty,
   nearbyPois,
   pathBetween,
   poiAt,
@@ -37,6 +38,7 @@ import { WorldCanvas } from "../components/WorldCanvas";
 import { useAppStore } from "../state/useAppStore";
 import { BattleScreen } from "./BattleScreen";
 import { LocalScreen } from "./LocalScreen";
+import { TravelScreen } from "./TravelScreen";
 
 function kindLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
@@ -48,6 +50,8 @@ export function WorldScreen() {
   const campaignUpdatedAt = useAppStore((state) => state.campaignUpdatedAt);
   const saveCampaign = useAppStore((state) => state.saveCampaign);
   const setScreen = useAppStore((state) => state.setScreen);
+  const worldMode = useAppStore((state) => state.worldMode);
+  const setWorldMode = useAppStore((state) => state.setWorldMode);
 
   const [selectedHex, setSelectedHex] = useState<Hex | null>(campaign?.party.position ?? null);
   const [toast, setToast] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
@@ -86,6 +90,7 @@ export function WorldScreen() {
   if (!campaign) return null;
   if (campaign.battle) return <BattleScreen />;
   if (campaign.local) return <LocalScreen />;
+  if (campaign.travel && worldMode === "travel") return <TravelScreen />;
 
   const world = campaign.world;
   const party = campaign.party;
@@ -94,29 +99,35 @@ export function WorldScreen() {
   const currentTerrain = getTerrain(terrainAt(world, party.position));
 
   const travel = (hex: Hex) => {
-    const result = moveParty(campaign, hex);
+    const result = fastTravel(campaign, hex);
     if (!result) {
-      setToast({ tone: "warn", text: "No land route to that hex." });
+      setToast({ tone: "warn", text: "No known route to that destination." });
       return;
     }
     setSelectedHex(hex);
-    void saveCampaign(result.state);
-    if (result.encounter) {
-      setPendingEncounter({
-        id: "core:road_ambush",
-        name: "Road ambush",
-        description: "Figures move in the brush beside the road. Steel catches the last of the light.",
-      });
-    } else {
-      setToast({
-        tone: "info",
-        text: `Travelled ${result.path.length} hexes in ${result.minutes} minutes.`,
-      });
+    const next = result.state;
+    setWorldMode(next.travel ? "travel" : "atlas");
+    void saveCampaign(next);
+    setToast({ tone: "info", text: result.message });
+  };
+
+  const walkHere = () => {
+    const entered = enterTravelMap(campaign);
+    if (!entered) {
+      setToast({ tone: "warn", text: "This ground cannot be walked from here." });
+      return;
     }
+    setWorldMode("travel");
+    void saveCampaign(entered.state);
+  };
+
+  const returnToTravel = () => {
+    setWorldMode("travel");
   };
 
   const enterLocal = (poiId: string) => {
-    const result = enterLocalMap(campaign, poiId);
+    const base = campaign.travel ? { ...campaign, travel: undefined } : campaign;
+    const result = enterLocalMap(base, poiId);
     if (!result) {
       setToast({ tone: "warn", text: "That place cannot be entered." });
       return;
@@ -173,7 +184,7 @@ export function WorldScreen() {
               <span className="truncate font-display text-base tracking-wide text-parchment">
                 {campaign.campaign.name}
               </span>
-              <span className="chip border-gold/30 text-[9px] text-gold/80">M3</span>
+              <span className="chip border-gold/30 text-[9px] text-gold/80">M8</span>
             </div>
             <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
               {world.name} · seed {world.seed}
@@ -198,6 +209,17 @@ export function WorldScreen() {
                 Enter {currentPoi.name}
               </button>
             ) : null}
+            {campaign.travel ? (
+              <button type="button" className="btn mt-1.5 px-2! py-1! text-[9px]!" onClick={returnToTravel}>
+                <Footprints className="size-3" />
+                Return to Travel Map
+              </button>
+            ) : (
+              <button type="button" className="btn mt-1.5 px-2! py-1! text-[9px]!" onClick={walkHere}>
+                <Footprints className="size-3" />
+                Walk the wilds
+              </button>
+            )}
           </div>
         </Panel>
 
@@ -236,7 +258,7 @@ export function WorldScreen() {
         <Panel className="pointer-events-auto px-3 py-2">
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <Compass className="size-3.5 text-gold/60" />
-            <span>Drag to pan · scroll to zoom · click a hex to travel</span>
+            <span>Drag to pan · scroll to zoom · click a hex to inspect · fast travel on known routes</span>
           </div>
           <div className="mt-1 flex items-center gap-3 font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
             <span className="flex items-center gap-1">
@@ -357,14 +379,14 @@ export function WorldScreen() {
                 </div>
                 <button
                   type="button"
-                  className="btn btn-primary px-3! py-1.5!"
+                  className="btn px-3! py-1.5!"
                   disabled={
                     !info.route || (selectedHex.q === party.position.q && selectedHex.r === party.position.r)
                   }
                   onClick={() => travel(selectedHex)}
                 >
                   <Footprints className="size-3.5" />
-                  Travel
+                  Fast travel
                 </button>
               </div>
             </>

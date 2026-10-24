@@ -18,6 +18,7 @@ export function AppHeader() {
   const bootstrap = useAppStore((state) => state.bootstrap);
   const campaign = useAppStore((state) => state.campaign);
   const setHelpOpen = useAppStore((state) => state.setHelpOpen);
+  const setWorldMode = useAppStore((state) => state.setWorldMode);
 
   const keyReady = settings?.apiKeyConfigured ?? false;
   const tooltips = settings?.settings.showTooltips ?? true;
@@ -57,7 +58,10 @@ export function AppHeader() {
               type="button"
               key={item.id}
               className={cn("nav-link flex items-center gap-1.5", screen === item.id && "nav-link-active")}
-              onClick={() => setScreen(item.id === "world" && !campaign ? "campaign" : item.id)}
+              onClick={() => {
+                if (item.id === "world") setWorldMode("atlas");
+                setScreen(item.id === "world" && !campaign ? "campaign" : item.id);
+              }}
               title={tooltips ? `Open ${item.label}` : undefined}
             >
               <Icon className="size-3" strokeWidth={1.5} />

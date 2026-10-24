@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** All milestones M0–M7 complete. Vertical slice packaged, installer built, and live OpenCode Go verified.
+**Status:** All milestones M0–M8 complete. Travel Map, vertical slice, installer, and live OpenCode Go verified.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md) · **Acceptance:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
@@ -24,7 +24,10 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Procedural world generation** in a Web Worker: elevation, climate, moisture, rivers, lakes, biomes, settlements, dungeons, landmarks, and terrain-aware road networks.
 - **World validation report** with hard errors and warnings before a world can be entered.
 - **Handcrafted world packs** with a sample region, Redford Reach, and the same runtime schema as generated worlds.
-- **PixiJS world map** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and click-to-travel.
+- **PixiJS atlas/world map** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and fast travel.
+- **Travel Map**: each world hex expands into a deterministic detailed field map with roads, rivers, forests, settlement outskirts, edge gates, visible enemy groups, and smooth WASD movement.
+- **Organic crossings**: walk through a road edge to enter the neighbouring world hex, or through a settlement gate to load its town map. Leaving a town returns to the same gate.
+- **Seamless combat**: visible enemy groups auto-aggro and turn the current Travel Map into the battle field; victory, retreat, and defeat return to the field.
 - **World time and campaign saves**: travel advances the clock, reveals fog, discovers landmarks, and persists through SQLite.
 - **Character creation wizard**: 3 ancestries, 3 classes, 3 backgrounds, point buy, standard array, rolled 4d6 stats, class/background skill choices, appearance, portrait, sigil, name, and pronouns.
 - **Derived character rules**: ancestry bonuses, HP, AC, Focus, speed, proficiency, saves, skills, starting kit, auto-equipped weapon and armor.
@@ -42,8 +45,14 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Director and evolving quests**: validated director operations, procedural work templates, faction/rumor reactions, branching Greywatch outcomes, and a deterministic quest recap.
 - **Companions**: Wren can be recruited, fights on her own turn, comments at camp, tracks approval, can be dismissed, and participates in romance gates.
 - **Save and polish**: three manual save slots, JSON export/import, autosave, keyboard/accessibility pass, field guide, generated audio/VFX, high contrast, reduced motion, custom Windows icon, and NSIS installer.
-- **Tests**: 94 Vitest tests and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
+- **Tests**: 99 Vitest tests and a Playwright Electron smoke test covering world and character creation, Travel Map entry, atlas fast travel, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
 - **Packaged Windows build** via electron-builder: 4.27 MB `app.asar`, no native modules. `pnpm package:installer` produces a 112 MB NSIS setup executable with the custom icon.
+
+![Travel Map](docs/images/travel-map.png)
+
+![Atlas and fast travel](docs/images/atlas.png)
+
+![Travel combat](docs/images/travel-encounter.png)
 
 ![AI Lab](docs/images/ai-lab.png)
 
@@ -155,8 +164,8 @@ The Electron app reads the OS keystore first, then falls back to `OPENCODE_API_K
 │                                                                  │
 │  Renderer (sandboxed, no Node)                                   │
 │  ├─ React 19 UI                                                  │
-│  ├─ PixiJS 8 (M1 world renderer)                                 │
-│  ├─ game engine package (M1+)                                    │
+│  ├─ PixiJS 8 (atlas, field, local, and battle renderers)          │
+│  ├─ game engine package (rules, worldgen, travel, combat)         │
 │  └─ typed API client + SSE                                       │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -166,7 +175,7 @@ The Electron app reads the OS keystore first, then falls back to `OPENCODE_API_K
 | Package | Responsibility |
 |---|---|
 | `packages/contracts` | Zod schemas and TypeScript types for state, commands, events, AI intents, and API payloads. |
-| `packages/engine` | Pure deterministic rules: hex math, A*, LOS, seeded RNG, dice, world generation, fog, travel. |
+| `packages/engine` | Pure deterministic rules: hex math, A*, LOS, seeded RNG, dice, world generation, fog, atlas travel, field-map generation, and encounters. |
 | `packages/content` | Data-driven ancestries, classes, backgrounds, abilities, items, skills, terrains, and world packs. |
 | `packages/ai-kit` | NPC prompt assembly, structured parsing, token estimation. |
 | `apps/server` | Hono API, SQLite repositories, OpenCode Go adapter, AI gateway. |
@@ -214,7 +223,10 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 - The world map renders terrain in batched PixiJS layers rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
 - The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred.
 - The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.
+- Travel Maps use one detailed map per world hex. Each is deterministic, but currently a single biome-driven layout template; handcrafted landmark silhouettes, weather systems, patrol schedules, and local events are post-slice.
 - Town and dungeon maps use a dedicated local PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
+- Travel Map movement is smooth WASD after the first field is entered. Town interiors still use click-to-walk with automatic exit when an exit hex is reached.
+- Fast travel is available from the atlas and consumes world time; it is not restricted to strictly discovered road segments yet.
 - Handcrafted Redford, Millbrook, and the Old Mill Crypt have authored local maps and NPCs. Procedural settlements share a generic settlement layout and a generic road trader rather than unique generated towns.
 - NPC schedules are hour-granular and computed from the campaign clock. NPCs do not pathfind between spots; they are placed at the active schedule spot when the local map is viewed.
 - NPC memory uses lexical retrieval and deterministic summaries, not an embedding index or SQLite FTS5. AI recruitment offers remain a player-confirmed authored action.
@@ -228,8 +240,9 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Post-slice roadmap
 
-- More handcrafted regions, towns, interiors, and dungeon encounters.
+- More handcrafted travel maps, unique biome layouts, weather, interiors, and dungeon encounters.
 - Deeper combat: full conditions, reactions, manual companion control, and richer enemy tactics.
+- Travel encounters with patrols, stealth/avoidance, mounted travel, and encounter-specific objectives.
 - More procedural quest templates, faction arcs, companions, and romance content.
 - Optional SQLite FTS5 or embedding memory, plus stronger AI evaluation fixtures.
 - Code signing, auto-update, localization, controller support, and a dedicated inference provider.

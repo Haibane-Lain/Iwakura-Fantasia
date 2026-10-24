@@ -216,7 +216,7 @@ export function MainMenu() {
           <Panel className="p-5">
             <div className="flex items-center justify-between">
               <SectionLabel>Road to the slice</SectionLabel>
-              <span className="font-mono text-[10px] text-faint">M0 / M7</span>
+              <span className="font-mono text-[10px] text-faint">M0 / M8</span>
             </div>
             <div className="mt-2 divide-y divide-line-soft/60">
               <RoadmapRow label="Foundation, local server, AI gateway" status="done" detail="M0" />
@@ -226,6 +226,7 @@ export function MainMenu() {
               <RoadmapRow label="Tactical battle maps" status="done" detail="M4" />
               <RoadmapRow label="AI NPCs, memory, Director" status="done" detail="M5–M6" />
               <RoadmapRow label="Polish, saves, installer" status="done" detail="M7" />
+              <RoadmapRow label="Travel maps, WASD, seamless gates" status="done" detail="M8" />
             </div>
           </Panel>
 

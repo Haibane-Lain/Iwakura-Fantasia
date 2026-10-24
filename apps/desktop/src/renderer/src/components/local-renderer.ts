@@ -77,6 +77,7 @@ export class LocalRenderer {
   private readonly pathLayer = new Graphics();
   private readonly labels: Array<{ text: Text; hex: Hex }> = [];
   private readonly callbacks: LocalRendererCallbacks;
+  private readonly mapBounds: { minX: number; maxX: number; minY: number; maxY: number };
   private readonly wheelHandler: (event: WheelEvent) => void;
   private hoverHex: Hex | null = null;
   private dragging = false;
@@ -94,6 +95,7 @@ export class LocalRenderer {
   ) {
     this.map = map;
     this.partyHex = partyHex;
+    this.mapBounds = this.computeMapBounds();
     this.callbacks = callbacks;
     this.app.stage.addChild(this.camera);
     this.camera.addChild(this.staticLayer, this.highlightLayer, this.pathLayer, this.dynamicLayer);
@@ -283,6 +285,7 @@ export class LocalRenderer {
         const dy = event.global.y - this.lastPointer.y;
         this.dragDistance += Math.abs(dx) + Math.abs(dy);
         this.camera.position.set(this.camera.position.x + dx, this.camera.position.y + dy);
+        this.clampCamera();
         this.lastPointer = { x: event.global.x, y: event.global.y };
       }
       this.updateHover(event.global.x, event.global.y);
@@ -325,8 +328,44 @@ export class LocalRenderer {
     const next = Math.max(this.minScale * 0.55, Math.min(this.maxScale, this.camera.scale.x * factor));
     this.camera.scale.set(next);
     this.camera.position.set(x - before.x * next, y - before.y * next);
+    this.clampCamera();
     this.updateLabels();
     this.updateHover(x, y);
+  }
+
+  private computeMapBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
+    const corners = [
+      { col: 0, row: 0 },
+      { col: this.map.width - 1, row: 0 },
+      { col: 0, row: this.map.height - 1 },
+      { col: this.map.width - 1, row: this.map.height - 1 },
+    ].map((offset) => hexToPixel(offsetToAxial(offset), HEX_SIZE));
+    const halfWidth = HEX_SIZE * 0.9;
+    return {
+      minX: Math.min(...corners.map((point) => point.x)) - halfWidth,
+      maxX: Math.max(...corners.map((point) => point.x)) + halfWidth,
+      minY: Math.min(...corners.map((point) => point.y)) - HEX_SIZE,
+      maxY: Math.max(...corners.map((point) => point.y)) + HEX_SIZE,
+    };
+  }
+
+  private clampCamera(): void {
+    const screenWidth = this.app.screen.width;
+    const screenHeight = this.app.screen.height;
+    const scale = this.camera.scale.x;
+    const mapWidth = (this.mapBounds.maxX - this.mapBounds.minX) * scale;
+    const mapHeight = (this.mapBounds.maxY - this.mapBounds.minY) * scale;
+    let x = this.camera.position.x;
+    let y = this.camera.position.y;
+    x =
+      mapWidth <= screenWidth
+        ? screenWidth / 2 - ((this.mapBounds.minX + this.mapBounds.maxX) / 2) * scale
+        : Math.max(screenWidth - this.mapBounds.maxX * scale, Math.min(-this.mapBounds.minX * scale, x));
+    y =
+      mapHeight <= screenHeight
+        ? screenHeight / 2 - ((this.mapBounds.minY + this.mapBounds.maxY) / 2) * scale
+        : Math.max(screenHeight - this.mapBounds.maxY * scale, Math.min(-this.mapBounds.minY * scale, y));
+    this.camera.position.set(x, y);
   }
 
   private fitToScreen(): void {
@@ -351,15 +390,13 @@ export class LocalRenderer {
     const initialScale = Math.max(0.7, Math.min(fitScale, 1.8));
     this.minScale = Math.max(0.35, fitScale * 0.8);
     this.maxScale = Math.max(2.4, initialScale * 3);
-    const center = hexToPixel(
-      offsetToAxial({ col: Math.floor(this.map.width / 2), row: Math.floor(this.map.height / 2) }),
-      HEX_SIZE,
-    );
+    const center = hexToPixel(this.partyHex, HEX_SIZE);
     this.camera.scale.set(initialScale);
     this.camera.position.set(
       this.app.screen.width / 2 - center.x * initialScale,
       this.app.screen.height / 2 - center.y * initialScale,
     );
+    this.clampCamera();
     this.updateLabels();
   }
 

@@ -320,6 +320,17 @@ export function leaveLocalMap(state: GameState): GameState {
         player: { ...player, hex: state.party.position, localMapId: undefined },
       }
     : state.entities;
+  if (state.travel) {
+    const position = state.travel.gateOutside ?? state.travel.map.entrance;
+    return {
+      ...state,
+      local: undefined,
+      travel: { ...state.travel, position, gateOutside: undefined },
+      entities,
+      clock: advanceClock(state.clock, 2),
+      campaign: updated(state),
+    };
+  }
   return {
     ...state,
     local: undefined,

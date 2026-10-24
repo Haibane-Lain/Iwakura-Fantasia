@@ -257,7 +257,8 @@ export const LocalExitSchema = z.object({
   name: z.string().min(1),
   hex: HexSchema,
   description: z.string().default(""),
-  target: z.enum(["world"]).default("world"),
+  target: z.enum(["world", "travel"]).default("world"),
+  direction: z.number().int().min(0).max(5).optional(),
 });
 export type LocalExit = z.infer<typeof LocalExitSchema>;
 
@@ -297,6 +298,41 @@ export const LocalStateSchema = z.object({
   encounterFlags: z.record(z.string(), z.boolean()).default({}),
 });
 export type LocalState = z.infer<typeof LocalStateSchema>;
+
+export const TravelGateSchema = z.object({
+  poiId: z.string().min(1),
+  name: z.string().min(1),
+  kind: z.enum(["town", "village", "dungeon", "ruin", "shrine", "camp", "landmark"]),
+  gateHex: HexSchema,
+  outsideHex: HexSchema,
+});
+export type TravelGate = z.infer<typeof TravelGateSchema>;
+
+export const TravelEnemyGroupSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  enemyIds: z.array(z.string().min(1)).min(1),
+  hex: HexSchema,
+  aggroRadius: z.number().int().min(1).max(12).default(5),
+  patrolRadius: z.number().int().min(0).max(6).default(2),
+  description: z.string().default(""),
+});
+export type TravelEnemyGroup = z.infer<typeof TravelEnemyGroupSchema>;
+
+export const TravelStateSchema = z.object({
+  map: LocalMapSchema,
+  worldHex: HexSchema,
+  /** Authoritative anchor hex. The renderer keeps sub-hex motion locally. */
+  position: HexSchema,
+  facing: z.number().int().min(0).max(5).default(0),
+  entryEdge: z.number().int().min(0).max(5).optional(),
+  gates: z.array(TravelGateSchema).default([]),
+  /** Where the party should stand after leaving a town/dungeon. */
+  gateOutside: HexSchema.optional(),
+  enemies: z.array(TravelEnemyGroupSchema).default([]),
+  clearedGroupIds: z.array(z.string()).default([]),
+});
+export type TravelState = z.infer<typeof TravelStateSchema>;
 
 export const ShopStateSchema = z.object({
   id: z.string().min(1),
@@ -386,6 +422,7 @@ export const BattleStateSchema = z.object({
   activeUnitId: z.string().optional(),
   status: z.enum(["active", "victory", "defeat", "retreated"]).default("active"),
   source: z.enum(["travel", "dungeon", "scripted"]).default("travel"),
+  travelGroupId: z.string().optional(),
   rewards: z.object({ gold: z.number().int().min(0).default(0) }).default({ gold: 0 }),
   round: z.number().int().min(1).default(1),
   turnIndex: z.number().int().min(0).default(0),
@@ -416,6 +453,7 @@ export const GameStateSchema = z.object({
   relationships: z.record(z.string(), RelationshipSchema).default({}),
   flags: z.record(z.string(), z.unknown()).default({}),
   local: LocalStateSchema.optional(),
+  travel: TravelStateSchema.optional(),
   shops: z.record(z.string(), ShopStateSchema).default({}),
   battle: BattleStateSchema.optional(),
   rng: z.object({

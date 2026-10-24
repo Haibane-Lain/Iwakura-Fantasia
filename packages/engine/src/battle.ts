@@ -157,24 +157,27 @@ function enemyUnit(def: EnemyDefinition, index: number, position: Hex, initiativ
 export interface StartBattleOptions {
   enemyIds: string[];
   source?: "travel" | "dungeon" | "scripted";
+  travelGroupId?: string;
+  enemyPositions?: Hex[];
 }
 
 export function startBattle(state: GameState, options: StartBattleOptions): GameState | null {
   if (state.battle || options.enemyIds.length === 0) return null;
-  const baseMap = state.local?.map ?? arenaMap(state);
-  const map: LocalMap = state.local
-    ? {
-        ...baseMap,
-        buildings: [],
-        exits: [],
-        interactables: [],
-        encounters: [],
-      }
-    : baseMap;
+  const baseMap = state.travel?.map ?? state.local?.map ?? arenaMap(state);
+  const map: LocalMap =
+    state.travel || state.local
+      ? {
+          ...baseMap,
+          buildings: [],
+          exits: [],
+          interactables: [],
+          encounters: [],
+        }
+      : baseMap;
   const player = state.entities.player;
   if (!player) return null;
   const rng = rngFromGameState(state);
-  const playerPos = state.local?.position ?? offsetToAxial({ col: 2, row: 4 });
+  const playerPos = state.travel?.position ?? state.local?.position ?? offsetToAxial({ col: 2, row: 4 });
   const playerUnit: BattleUnit = {
     id: "battle:player",
     entityId: player.id,
@@ -197,13 +200,18 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
 
   const occupied = new Set([hexKey(playerPos)]);
   const enemies: BattleUnit[] = [];
-  const encounterHex = state.local?.map.encounters[0]?.hex ?? offsetToAxial({ col: 10, row: 4 });
+  const encounterHex =
+    options.enemyPositions?.[0] ?? state.local?.map.encounters[0]?.hex ?? offsetToAxial({ col: 10, row: 4 });
   const candidates = freeHexes(map, encounterHex, 3);
   let candidateIndex = 0;
   for (const [index, enemyId] of options.enemyIds.entries()) {
     const def = getEnemy(enemyId);
     if (!def) continue;
-    let position = candidates[candidateIndex] ?? offsetToAxial({ col: 10, row: 4 });
+    const preferred = options.enemyPositions?.[index];
+    let position =
+      preferred && localIsWalkable(map, preferred) && !occupied.has(hexKey(preferred))
+        ? preferred
+        : (candidates[candidateIndex] ?? offsetToAxial({ col: 10, row: 4 }));
     while (occupied.has(hexKey(position)) && candidateIndex < candidates.length) {
       candidateIndex += 1;
       position = candidates[candidateIndex] ?? position;
@@ -265,6 +273,7 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
     activeUnitId: active.id,
     status: "active",
     source: options.source ?? "travel",
+    ...(options.travelGroupId ? { travelGroupId: options.travelGroupId } : {}),
     rewards: {
       gold: enemies.reduce(
         (sum, unit) => sum + (getEnemy(unit.id.split(":").slice(2).join(":"))?.gold ?? 0),
@@ -719,6 +728,28 @@ export function finishBattle(state: GameState): GameState | null {
     };
   } else {
     next = { ...next, entities };
+  }
+
+  if (battle.travelGroupId && next.travel) {
+    const groupId = battle.travelGroupId;
+    const travel = next.travel;
+    const clearedKey = `travel.cleared.${travel.worldHex.q},${travel.worldHex.r}`;
+    const cleared = Array.isArray(next.flags[clearedKey])
+      ? (next.flags[clearedKey] as unknown[]).filter((entry): entry is string => typeof entry === "string")
+      : [];
+    next = {
+      ...next,
+      travel: {
+        ...travel,
+        enemies: travel.enemies.filter((group) => group.id !== groupId),
+        clearedGroupIds: [...new Set([...travel.clearedGroupIds, groupId])],
+        ...(battle.status === "defeat" ? { position: travel.map.entrance } : {}),
+      },
+      flags: {
+        ...next.flags,
+        [clearedKey]: [...new Set([...cleared, groupId])],
+      },
+    };
   }
   return next;
 }

@@ -1,6 +1,6 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** All milestones M0–M7 complete; vertical slice packaged and verified
+**Status:** All milestones M0-M8 complete; Travel Map, vertical slice, installer, and live provider verified
 **Last updated:** 2026-10-24
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
@@ -1055,6 +1055,28 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - `pnpm package:installer` builds the NSIS installer with `apps/desktop/build/icon.ico` and version metadata.
 - `pnpm test:acceptance` runs lint, type checks, unit/integration tests, and the Electron E2E. See `docs/ACCEPTANCE.md`.
 
+### M8 — Travel Map
+
+- [x] Add a persistent TravelState and save migration for the current field map.
+- [x] Generate one deterministic detailed hex map per world hex from biome, elevation, moisture, rivers, roads, and POIs.
+- [x] Connect six world-hex edges with matching road/river entries and seamless neighbour loading.
+- [x] Add detailed PixiJS field rendering with props, variation, camera follow, collision, zoom, and map-edge clamping.
+- [x] Add smooth WASD movement, Shift sprint, and automatic gate/edge transitions.
+- [x] Add settlement and dungeon gates that load local maps and return to the same outside position.
+- [x] Add visible travel enemy groups, aggro/LOS checks, automatic turn-based combat, and victory/retreat/defeat return.
+- [x] Add atlas fast travel to discovered destinations, with the destination field loaded at the gate.
+- [x] Add travel map help, HUD, threat panel, road-edge panel, and screenshots.
+- [x] Add deterministic travel unit tests for generation, connectivity, crossings, gates, encounters, and fast travel.
+
+**Exit:** leave Redford, walk the field, cross a world hex, trigger a road group, win or retreat, and enter/leave Millbrook without using a modal enter/leave command. Achieved in engine tests and the Electron E2E; travel maps were manually exercised with WASD, gate entry, edge crossing, and travel combat.
+
+**M8 notes:**
+- The atlas remains available for inspection and fast travel. Travel is the primary field movement mode.
+- Each field map is 40×28 hexes. The renderer keeps smooth sub-hex motion locally; the engine save stores the authoritative anchor hex.
+- Encounters use the current field map, preserve terrain/cover/high ground, and remove defeated groups from the field and future regenerations.
+- Procedural villages still reuse the generic settlement interior; handcrafted towns keep their authored interiors.
+- Current field movement is smooth WASD; local town interiors still use click-to-walk and auto-exit on an exit hex. Manual companion override and patrol schedules remain post-slice.
+
 ---
 
 ## 15. Vertical slice definition
@@ -1173,7 +1195,8 @@ Create these as decisions are implemented:
 - M5: complete vertical slice; live structured NPC turns, intent repair/validation, memory/summaries, disposition/trade/quest/item/combat effects, recruitment, evals, and AI telemetry work.
 - M6: complete vertical slice; templates, director operations, branching quests, factions/rumors, companions/banter, romance gates, and recap work.
 - M7: complete vertical slice; slots, export/import, settings, guide, audio/VFX, accessibility, installer, and acceptance test work.
-- Next: **post-slice work** (additional content, deeper combat, more procedural quests, more companions, and dedicated-provider hardening).
+- M8: complete Travel Map; deterministic per-hex field generation, smooth WASD, edge crossings, organic gates, visible auto-aggro encounters, travel-map battles, and atlas fast travel.
+- Next: **post-slice work** (additional content, unique biome templates, weather/patrols, deeper combat, more procedural quests, more companions, and dedicated-provider hardening).
 - Blockers: none.
 - Resolved: Electron 45 bundles Node 24.22, so `node:sqlite` works and `better-sqlite3` is unnecessary.
 - Resolved: Pixi 8 works under the strict CSP by importing `pixi.js/unsafe-eval`, which installs the non-eval polyfills.

@@ -10,5 +10,6 @@ export * from "./rng.js";
 export * from "./social.js";
 export * from "./state-rng.js";
 export * from "./time.js";
+export * from "./travel.js";
 export * from "./world.js";
 export * from "./worldgen.js";

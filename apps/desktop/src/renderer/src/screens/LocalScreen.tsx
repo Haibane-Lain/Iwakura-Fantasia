@@ -1,9 +1,10 @@
 import { getNpcDefinition } from "@iwakura/content";
-import type { Hex, LocalBuilding, LocalEncounter } from "@iwakura/contracts";
+import type { GameState, Hex, LocalBuilding, LocalEncounter } from "@iwakura/contracts";
 import {
   advanceTime,
   battleEnemiesForEncounter,
   ensureShop,
+  enterTravelMap,
   formatClock,
   interactLocal,
   leaveLocalMap,
@@ -59,6 +60,7 @@ export function LocalScreen() {
   const campaignSaveState = useAppStore((state) => state.campaignSaveState);
   const saveCampaign = useAppStore((state) => state.saveCampaign);
   const setScreen = useAppStore((state) => state.setScreen);
+  const setWorldMode = useAppStore((state) => state.setWorldMode);
 
   const [selectedHex, setSelectedHex] = useState<Hex | null>(campaign?.local?.position ?? null);
   const [hoverHex, setHoverHex] = useState<Hex | null>(null);
@@ -130,6 +132,12 @@ export function LocalScreen() {
     if (result.encounter) {
       setPendingEncounter(result.encounter);
       notify(`${result.encounter.name} — decide whether to fight or avoid.`, "warn");
+      return;
+    }
+    if (localExitAt(result.state, hex)) {
+      persist(toTravel(result.state));
+      setWorldMode("travel");
+      setScreen("world");
     }
   };
 
@@ -153,9 +161,28 @@ export function LocalScreen() {
     notify(result.message, result.state === campaign ? "warn" : "info");
   };
 
+  const toTravel = (state: GameState): GameState => {
+    const poiId = state.local?.poiId;
+    const left = leaveLocalMap(state);
+    if (left.travel) return left;
+    const arrived = enterTravelMap(left);
+    if (!arrived) return left;
+    const gate = arrived.travel.gates.find((entry) => entry.poiId === poiId);
+    if (!gate) return arrived.state;
+    return {
+      ...arrived.state,
+      travel: {
+        ...arrived.travel,
+        position: gate.outsideHex,
+        gateOutside: gate.outsideHex,
+      },
+    };
+  };
+
   const leave = () => {
-    const next = leaveLocalMap(campaign);
-    persist(next);
+    persist(toTravel(campaign));
+    setWorldMode("travel");
+    setScreen("world");
   };
 
   const rest = (building: LocalBuilding) => {
@@ -224,7 +251,7 @@ export function LocalScreen() {
               <DoorOpen className="size-3.5 text-gold/70" />
               <span className="truncate font-display text-base tracking-wide text-parchment">{map.name}</span>
               <span className="chip border-gold/30 text-[9px] text-gold/80">{kindLabel(map.kind)}</span>
-              <span className="chip border-gold/20 text-[9px] text-gold/60">M3</span>
+              <span className="chip border-gold/20 text-[9px] text-gold/60">M8</span>
             </div>
             <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
               {campaign.world.name} · {map.width}×{map.height}

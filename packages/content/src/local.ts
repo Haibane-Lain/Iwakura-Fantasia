@@ -106,6 +106,62 @@ export const LOCAL_TILES: LocalTileDefinition[] = [
     color: 0x8a7d5e,
     walkable: true,
   },
+  {
+    id: "brush",
+    name: "Brush",
+    description: "Low scrub and thorn, easy to move through but poor cover.",
+    color: 0x4f5d39,
+    walkable: true,
+  },
+  {
+    id: "rock",
+    name: "Rock",
+    description: "A weather-cracked outcrop. It blocks the way.",
+    color: 0x655f54,
+    walkable: false,
+  },
+  {
+    id: "cliff",
+    name: "Cliff",
+    description: "A sheer drop or wall of stone.",
+    color: 0x3f3a33,
+    walkable: false,
+  },
+  {
+    id: "marsh",
+    name: "Marsh",
+    description: "Reed-choked shallows. Wet, slow, and full of hidden life.",
+    color: 0x4a5a43,
+    walkable: true,
+  },
+  {
+    id: "sand",
+    name: "Sand",
+    description: "Wind-drawn sand over harder ground.",
+    color: 0xa89a6a,
+    walkable: true,
+  },
+  {
+    id: "snow",
+    name: "Snow",
+    description: "Old snow packed into ice and grey slush.",
+    color: 0xc9d0cd,
+    walkable: true,
+  },
+  {
+    id: "crop",
+    name: "Crops",
+    description: "A tended strip of grain or vegetables.",
+    color: 0x877b45,
+    walkable: true,
+  },
+  {
+    id: "ruin_floor",
+    name: "Old stones",
+    description: "Broken flagstones and foundations reclaimed by the wild.",
+    color: 0x6b6252,
+    walkable: true,
+  },
 ];
 
 const LOCAL_TILE_BY_ID = new Map(LOCAL_TILES.map((tile) => [tile.id, tile]));
@@ -131,6 +187,15 @@ export const LOCAL_LEGEND: Record<string, string> = {
   a: "altar",
   c: "crate",
   x: "bridge",
+  u: "brush",
+  o: "rock",
+  "^": "cliff",
+  "~": "marsh",
+  s: "sand",
+  n: "snow",
+  G: "crop",
+  U: "ruin_floor",
+  H: "high_ground",
 };
 
 export function localTileFromChar(char: string): string {
