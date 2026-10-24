@@ -1,7 +1,7 @@
 import type { NpcPersona } from "@iwakura/contracts";
 import { NpcTurnSchema } from "@iwakura/contracts";
 import { describe, expect, it } from "vitest";
-import { buildNpcPrompt, estimateTokens, parseStructured, stripCodeFence } from "./index.js";
+import { buildNpcPrompt, estimateTokens, parseNpcTurn, parseStructured, stripCodeFence } from "./index.js";
 
 const persona: NpcPersona = {
   id: "npc:mara",
@@ -40,6 +40,32 @@ describe("npc prompt", () => {
     expect(first.user.indexOf("RELATIONSHIP")).toBeLessThan(first.user.indexOf("PLAYER SAYS"));
     expect(first.system).toContain("Mara Vell");
     expect(first.user).toContain("The player paid for two nights up front.");
+  });
+});
+
+describe("npc turn repair", () => {
+  it("keeps speech and drops malformed intents instead of failing the turn", () => {
+    const result = parseNpcTurn(
+      JSON.stringify({
+        speech: "The mill is turning again.",
+        emotion: "friendly",
+        intents: [{ type: "remember", text: "The player fixed the mill." }, { type: "not_a_real_intent" }],
+        memoryWrites: [{ text: "The player asked about the mill.", importance: 4 }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.speech).toBe("The mill is turning again.");
+      expect(result.value.intents).toHaveLength(1);
+      expect(result.value.intents[0]?.type).toBe("remember");
+      expect(result.value.memoryWrites[0]?.importance).toBe(1);
+      expect(result.warnings.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("rejects a reply without speech", () => {
+    const result = parseNpcTurn(JSON.stringify({ intents: [] }));
+    expect(result.ok).toBe(false);
   });
 });
 

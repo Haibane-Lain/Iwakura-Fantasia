@@ -7,6 +7,7 @@ import type {
   GameState,
   HealthResponse,
   ModelInfo,
+  NpcTurnRequest,
   SettingsPatch,
   SettingsResponse,
 } from "@iwakura/contracts";
@@ -99,7 +100,24 @@ export class ApiClient {
     onEvent: (event: AiStreamEvent) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/ai/test`, {
+    await this.streamSse("/api/ai/test", body, onEvent, signal);
+  }
+
+  async streamAiNpc(
+    body: NpcTurnRequest,
+    onEvent: (event: AiStreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.streamSse("/api/ai/npc", body, onEvent, signal);
+  }
+
+  private async streamSse(
+    path: string,
+    body: unknown,
+    onEvent: (event: AiStreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
       method: "POST",
       headers: this.headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),

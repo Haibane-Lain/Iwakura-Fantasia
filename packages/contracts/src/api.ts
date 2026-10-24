@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ContentRatingSchema, DifficultySchema } from "./game.js";
+import { NpcPersonaSchema } from "./ai.js";
+import { ContentRatingSchema, DifficultySchema, RelationshipSchema } from "./game.js";
 
 export const ModelInfoSchema = z.object({
   id: z.string().min(1),
@@ -64,6 +65,33 @@ export const AiTestRequestSchema = z.object({
   maxOutputTokens: z.number().int().min(1).max(4000).optional(),
 });
 export type AiTestRequest = z.infer<typeof AiTestRequestSchema>;
+
+export const NpcTurnRequestSchema = z.object({
+  campaignId: z.string().max(120).optional(),
+  npcId: z.string().min(1).max(120),
+  persona: NpcPersonaSchema,
+  worldName: z.string().min(1).max(160),
+  regionName: z.string().min(1).max(160),
+  timeOfDay: z.string().min(1).max(40),
+  scene: z.string().min(1).max(2000),
+  relationship: RelationshipSchema,
+  memories: z.array(z.string().min(1).max(500)).max(20).default([]),
+  transcript: z
+    .array(
+      z.object({
+        role: z.enum(["player", "npc"]),
+        text: z.string().min(1).max(1200),
+      }),
+    )
+    .max(20)
+    .default([]),
+  playerUtterance: z.string().min(1).max(1000),
+  contentRating: ContentRatingSchema.default("teen"),
+  model: z.string().min(1).max(120).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxOutputTokens: z.number().int().min(1).max(2000).optional(),
+});
+export type NpcTurnRequest = z.infer<typeof NpcTurnRequestSchema>;
 
 export const AiCallLogSchema = z.object({
   id: z.string().min(1),

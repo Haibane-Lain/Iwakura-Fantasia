@@ -182,20 +182,29 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
     await expect(window.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(window.getByText("Model routing").first()).toBeVisible();
 
-    // Exercise the OS-encrypted keystore and the settings round-trip with a
-    // deliberately invalid key. It is removed again in the same test.
-    await window.locator("#api-key").fill("test-dummy-key-12345678");
-    await window.getByRole("button", { name: "Store key" }).click();
-    await expect(window.getByText("configured").first()).toBeVisible({ timeout: 15_000 });
-    await window.getByRole("button", { name: "Remove" }).click();
-    await expect(window.getByText("missing").first()).toBeVisible({ timeout: 10_000 });
+    // Exercise the OS-encrypted keystore only when no real key is configured,
+    // so running E2E locally never deletes the developer's key.
+    const keyAlreadyConfigured = await window
+      .getByText("configured", { exact: true })
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (!keyAlreadyConfigured) {
+      await window.locator("#api-key").fill("test-dummy-key-12345678");
+      await window.getByRole("button", { name: "Store key" }).click();
+      await expect(window.getByText("configured", { exact: true }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      await window.getByRole("button", { name: "Remove" }).click();
+      await expect(window.getByText("missing", { exact: true }).first()).toBeVisible({ timeout: 10_000 });
 
-    // With no key, the lab must surface a clean configuration error.
-    await window.locator("nav").getByRole("button", { name: "AI Lab" }).click();
-    await window.getByRole("button", { name: "Send turn" }).click();
-    await expect(window.getByText("OpenCode Go API key is not configured").first()).toBeVisible({
-      timeout: 10_000,
-    });
+      // With no key, the lab must surface a clean configuration error.
+      await window.locator("nav").getByRole("button", { name: "AI Lab" }).click();
+      await window.getByRole("button", { name: "Send turn" }).click();
+      await expect(window.getByText("OpenCode Go API key is not configured").first()).toBeVisible({
+        timeout: 10_000,
+      });
+    }
 
     await window.locator("nav").getByRole("button", { name: "Chronicle" }).click();
     await expect(window.getByText("Iwakura").first()).toBeVisible();

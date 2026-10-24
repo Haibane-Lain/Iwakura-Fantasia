@@ -1,11 +1,12 @@
-import { buildNpcPrompt, parseStructured } from "@iwakura/ai-kit";
+import { parseNpcTurn } from "@iwakura/ai-kit";
 import { getDialogueDefinition } from "@iwakura/content";
 import type { NpcDefinition } from "@iwakura/contracts";
-import { NpcTurnSchema } from "@iwakura/contracts";
 import {
   applyDialogueAction,
+  applyNpcTurn,
   dialogueRootForNpc,
   npcAppearance,
+  npcMemories,
   npcRelationship,
   npcsInLocalMap,
   timeOfDay,
@@ -49,6 +50,7 @@ export function DialoguePanel({
   const [utterance, setUtterance] = useState("");
   const [aiReply, setAiReply] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiEvents, setAiEvents] = useState<string[]>([]);
   const [aiRunning, setAiRunning] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -111,26 +113,25 @@ export function DialoguePanel({
     setAiRunning(true);
     setAiError(null);
     setAiReply(null);
-    const prompt = buildNpcPrompt({
-      worldName: campaign.world.name,
-      regionName: campaign.local?.map.name ?? campaign.world.name,
-      timeOfDay: timeOfDay(campaign.clock),
-      persona: npc.persona,
-      relationship,
-      scene: `${npc.role} — ${presence?.schedule.activity ?? "at their post"}. ${
-        campaign.local?.map.description ?? campaign.world.name
-      }`,
-      memories: [],
-      transcript: history.slice(-6),
-      playerUtterance: utterance.trim(),
-      contentRating: campaign.campaign.settings.contentRating,
-    });
+    setAiEvents([]);
     let text = "";
     try {
-      await apiClient.streamAiTest(
+      await apiClient.streamAiNpc(
         {
-          prompt: prompt.user,
-          system: prompt.system,
+          campaignId: campaign.campaign.id,
+          npcId: npc.id,
+          persona: npc.persona,
+          worldName: campaign.world.name,
+          regionName: campaign.local?.map.name ?? campaign.world.name,
+          timeOfDay: timeOfDay(campaign.clock),
+          scene: `${npc.role} — ${presence?.schedule.activity ?? "at their post"}. ${
+            campaign.local?.map.description ?? campaign.world.name
+          }`,
+          relationship,
+          memories: npcMemories(campaign, npc.id),
+          transcript: history.slice(-6),
+          playerUtterance: utterance.trim(),
+          contentRating: campaign.campaign.settings.contentRating,
           maxOutputTokens: 500,
           temperature: settings?.settings.ai.temperature ?? 0.8,
         },
@@ -140,8 +141,13 @@ export function DialoguePanel({
           if (event.type === "error") setAiError(event.message);
         },
       );
-      const parsed = parseStructured(NpcTurnSchema, text);
+      const parsed = parseNpcTurn(text);
       if (parsed.ok) {
+        const applied = applyNpcTurn(campaign, npc.id, parsed.value);
+        if (applied.state !== campaign) await saveCampaign(applied.state);
+        const notes = [...parsed.warnings, ...applied.events, ...applied.rejected];
+        setAiEvents(notes);
+        if (notes.length > 0) onToast(notes.join(" "), applied.rejected.length > 0 ? "warn" : "info");
         setAiReply(parsed.value.speech);
         setHistory((current) => [
           ...current,
@@ -149,18 +155,21 @@ export function DialoguePanel({
           line("npc", parsed.value.speech),
         ]);
         setUtterance("");
-      } else if (text.trim()) {
-        setAiReply(text.trim());
-        setHistory((current) => [...current, line("player", utterance.trim())]);
-        setUtterance("");
+        if (applied.shopId) {
+          onOpenShop(applied.shopId);
+          onClose();
+          return;
+        }
+        if (applied.battleStarted) {
+          onClose();
+          return;
+        }
       } else {
-        setAiError("The model returned no usable reply.");
+        setAiError(`The reply failed validation: ${parsed.error}`);
       }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       setAiError(message);
-      const fallback = npc.persona.sampleLines[0];
-      if (fallback) setAiReply(fallback);
     } finally {
       setAiRunning(false);
     }
@@ -239,6 +248,17 @@ export function DialoguePanel({
             </div>
           ) : null}
 
+          {aiEvents.length > 0 ? (
+            <div className="mt-2 border border-gold/25 bg-gold/[0.035] px-3 py-2">
+              <div className="text-[9px] uppercase tracking-[0.12em] text-gold/70">Engine result</div>
+              <div className="mt-1 space-y-0.5 text-[10px] leading-4 text-parchment-dim">
+                {aiEvents.map((event) => (
+                  <div key={event}>· {event}</div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {aiError ? (
             <div className="mt-3 border border-blood/35 bg-blood/[0.06] px-3 py-2 text-[10px] leading-5 text-[#e0b0aa]">
               AI reply unavailable: {aiError}. The authored dialogue below is still available.
@@ -264,7 +284,7 @@ export function DialoguePanel({
             <div className="flex items-center justify-between gap-2">
               <span className="kicker">Speak freely</span>
               <span className="text-[9px] text-faint">
-                AI wording hook · engine-validated intents arrive in M5
+                structured reply · safe intents are validated by the engine
               </span>
             </div>
             <div className="mt-2 flex gap-2">

@@ -1,5 +1,5 @@
-import type { NpcPersona, NpcTurn, NpcTurn as NpcTurnType } from "@iwakura/contracts";
-import { NpcTurnSchema } from "@iwakura/contracts";
+import type { NpcIntent, NpcPersona, NpcTurn, NpcTurn as NpcTurnType } from "@iwakura/contracts";
+import { NpcIntentSchema, NpcTurnSchema } from "@iwakura/contracts";
 import type { ZodType } from "zod";
 
 export const PROMPT_VERSION = "npc-v0.1.0";
@@ -64,8 +64,20 @@ Return a single JSON object:
   "intents": Intent[],
   "memoryWrites": { "text": string, "importance": number }[]
 }
-Intent types: adjust_disposition, remember, offer_quest, complete_quest, open_trade, give_item, demand_item, offer_recruitment, dismiss_companion, start_combat, flee, surrender, call_for_help, set_meeting, mark_location.
-Maximum 3 intents. Maximum 2 memory writes.`,
+Intent examples (use only these shapes):
+- {"type":"adjust_disposition","axis":"trust","delta":3,"reason":"The player kept their word."}
+- {"type":"remember","fact":"The player asked about the mill.","importance":0.5}
+- {"type":"offer_quest","templateId":"core:the_stopped_mill","hook":"The miller needs help."}
+- {"type":"complete_quest","questId":"core:the_stopped_mill"}
+- {"type":"open_trade"}
+- {"type":"give_item","itemId":"core:torch","quantity":1}
+- {"type":"demand_item","itemId":"core:torch","quantity":1}
+- {"type":"offer_recruitment","wage":10,"role":"companion"}
+- {"type":"start_combat","reason":"The player drew steel."}
+- {"type":"flee"} | {"type":"surrender"} | {"type":"call_for_help"}
+- {"type":"set_meeting","inHours":2,"locationId":"core:redford"}
+- {"type":"mark_location","locationId":"core:old_mill_crypt"}
+Maximum 3 intents. Maximum 2 memory writes. Every memory importance must be between 0 and 1.`,
   ].join("\n\n");
 
   const memoryBlock =
@@ -135,4 +147,106 @@ export function stripCodeFence(text: string): string {
 
 export function normaliseNpcTurn(value: NpcTurn): NpcTurnType {
   return NpcTurnSchema.parse(value);
+}
+
+export type NpcTurnParseResult =
+  | { ok: true; value: NpcTurn; warnings: string[] }
+  | { ok: false; error: string; warnings: string[] };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function repairIntent(value: unknown): NpcIntent | null {
+  if (!isRecord(value) || typeof value.type !== "string") return null;
+  const candidate: Record<string, unknown> = { ...value };
+  if (candidate.type === "remember" && typeof candidate.fact !== "string") {
+    const text = candidate.text ?? candidate.memory ?? candidate.content;
+    if (typeof text === "string") candidate.fact = text;
+  }
+  if (candidate.type === "remember" && typeof candidate.importance !== "number") {
+    candidate.importance = 0.5;
+  }
+  if (candidate.type === "adjust_disposition") {
+    if (typeof candidate.reason !== "string") candidate.reason = "Model disposition change.";
+    if (typeof candidate.axis !== "string") candidate.axis = "trust";
+    if (typeof candidate.delta !== "number") candidate.delta = 0;
+  }
+  if (candidate.type === "offer_quest") {
+    if (typeof candidate.hook !== "string") candidate.hook = "The NPC has work to offer.";
+  }
+  if (candidate.type === "start_combat" && typeof candidate.reason !== "string") {
+    candidate.reason = "The NPC turns hostile.";
+  }
+  if (candidate.type === "give_item" || candidate.type === "demand_item") {
+    if (typeof candidate.quantity !== "number") candidate.quantity = 1;
+  }
+  if (candidate.type === "offer_recruitment") {
+    if (typeof candidate.wage !== "number") candidate.wage = 0;
+    if (typeof candidate.role !== "string") candidate.role = "companion";
+  }
+  const parsed = NpcIntentSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Parses a model turn leniently: speech is required, but malformed intents and
+ * memory writes are dropped rather than failing the whole conversation.
+ */
+export function parseNpcTurn(text: string): NpcTurnParseResult {
+  let json: unknown;
+  try {
+    json = JSON.parse(stripCodeFence(text));
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      warnings: [],
+    };
+  }
+  if (!isRecord(json) || typeof json.speech !== "string" || json.speech.trim().length === 0) {
+    return { ok: false, error: "The reply is missing a non-empty speech field.", warnings: [] };
+  }
+  const warnings: string[] = [];
+  const intents: NpcIntent[] = [];
+  if (Array.isArray(json.intents)) {
+    for (const intent of json.intents.slice(0, 3)) {
+      const repaired = repairIntent(intent);
+      if (repaired) intents.push(repaired);
+      else warnings.push("Dropped an invalid NPC intent.");
+    }
+  }
+  const memoryWrites: Array<{ text: string; importance: number }> = [];
+  if (Array.isArray(json.memoryWrites)) {
+    for (const memory of json.memoryWrites.slice(0, 2)) {
+      if (!isRecord(memory) || typeof memory.text !== "string" || memory.text.trim().length === 0) {
+        warnings.push("Dropped an invalid memory write.");
+        continue;
+      }
+      const importance =
+        typeof memory.importance === "number" && Number.isFinite(memory.importance)
+          ? Math.max(0, Math.min(1, memory.importance))
+          : 0.4;
+      memoryWrites.push({ text: memory.text.slice(0, 300), importance });
+    }
+  }
+  const emotion =
+    typeof json.emotion === "string" &&
+    ["neutral", "friendly", "wary", "angry", "afraid", "sad", "amused"].includes(json.emotion)
+      ? json.emotion
+      : "neutral";
+  const parsed = NpcTurnSchema.safeParse({
+    speech: json.speech,
+    emotion,
+    intents,
+    memoryWrites,
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
+      warnings,
+    };
+  }
+  return { ok: true, value: parsed.data, warnings };
 }

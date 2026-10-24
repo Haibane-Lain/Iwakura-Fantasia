@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** M3 complete. M4 battle vertical slice in progress (initiative, movement, attacks, abilities, enemy AI, retreat, rewards).
+**Status:** M3 complete. M4 battle vertical slice and M5 structured NPC AI vertical slice in progress. Live OpenCode Go turns verified.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md)
 
@@ -37,7 +37,9 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Quest journal and state machine**: accept, reveal targets on the map, progress reach/interact objectives, turn in for gold and items.
 - **The Mill That Stopped** and **The Greywatch Light** authored quests, plus a crypt ledger, dungeon encounter trigger, inn rest, and wait controls.
 - **Battle vertical slice**: initiative order, rounds, movement, melee attacks, class abilities, focus costs, shield/condition handling, simple enemy utility AI, victory/defeat/retreat, gold rewards, and a saved battle state. Encounter prompts start battles from the road or a dungeon.
-- **Tests**: Vitest for hex/RNG/worldgen/character/content/local maps/NPC schedules/dialogue/quests/trade/battle/AI prompt/server routes (75 tests), and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, keystore round-trip, and the missing-key error path.
+- **Structured NPC AI turns**: a dedicated `/api/ai/npc` endpoint assembles the persona prompt, streams JSON from OpenCode Go, repairs common malformed intents, and validates every intent against the engine before applying disposition, memory, trade, quest, item, or combat changes.
+- **Live AI verified**: a real OpenCode Go turn streamed through the local gateway at 2.2 s and $0.0001, and a live Hessa turn produced a valid AI voice plus engine-applied trust and memory changes.
+- **Tests**: Vitest for hex/RNG/worldgen/character/content/local maps/NPC schedules/dialogue/quests/trade/battle/NPC intent repair/AI prompt/server routes (83 tests), and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
 - **Packaged Windows build** via electron-builder (`--dir` smoke test): about 4 MB `app.asar`, no native modules.
 
 ![AI Lab](docs/images/ai-lab.png)
@@ -63,6 +65,10 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 ![Crypt ledger recovered](docs/images/dungeon-ledger.png)
 
 ![Tactical battle](docs/images/battle.png)
+
+![Live OpenCode Go turn](docs/images/live-ai-turn.png)
+
+![Live NPC AI turn with engine-validated intents](docs/images/npc-ai.png)
 
 ---
 
@@ -199,19 +205,17 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 - Town and dungeon maps use a dedicated local PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
 - Handcrafted Redford, Millbrook, and the Old Mill Crypt have authored local maps and NPCs. Procedural settlements share a generic settlement layout and a generic road trader rather than unique generated towns.
 - NPC schedules are hour-granular and computed from the campaign clock. NPCs do not pathfind between spots; they are placed at the active schedule spot when the local map is viewed.
-- The dialogue AI hook builds a full NPC persona prompt and streams an in-character reply through the local gateway, but it only displays speech. Structured intent validation and state mutation remain M5 work.
+- The NPC AI path now assembles persona prompts, streams structured JSON, repairs malformed intents, and applies validated disposition, memory, trade, quest, item, and combat intents. Conversation summaries, FTS retrieval, recruitment, and companion reactions remain M5/M6 work.
 - Quests are authored, linear state machines with reach/interact objectives. Quest templates, branching, factions, and world reactions are M6 work.
 - The handcrafted world currently generates its roads through the same terrain-aware network builder; authored road paths are supported by the schema but not used by the sample pack.
 - `pnpm package` produces an unpacked Windows build; the NSIS installer target is configured but not yet signed or branded with a custom icon.
-- A successful live OpenCode Go turn still needs a valid key; the error path and adapter have been verified with an intentionally invalid key.
+- Live OpenCode Go turns are verified (streaming, usage, and cost). The E2E keystore test is skipped when a real key is configured so local runs do not delete it.
 - OpenCode Go is intended for coding-agent traffic. Treat it as a development/personal provider and keep the adapter swappable before shipping.
 
 ---
 
-## Next milestone: finish M4 — Battle
+## Next milestone: finish M4 and M5
 
-- Cover, elevation, line-of-sight UI, and the full condition/action economy.
-- Companion combat turns and player override.
-- Battle animations, damage previews, and richer enemy tactics.
-- A second battle and a full victory path in the E2E.
-- Then M5: structured AI NPC turns and intent validation.
+- M4: cover, elevation, companion turns, animations, richer enemy tactics, and a second battle/victory path in the E2E.
+- M5: conversation summaries, FTS memory retrieval, recruitment/companion reactions, eval fixtures for forbidden intents, and stronger offline fallback.
+- Then M6: director-driven quests, evolving quest branches, factions, and companion approval.

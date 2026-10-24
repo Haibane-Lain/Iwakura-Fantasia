@@ -1,3 +1,4 @@
+export * from "./ai.js";
 export * from "./battle.js";
 export * from "./character.js";
 export * from "./grid.js";

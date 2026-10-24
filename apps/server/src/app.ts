@@ -1,10 +1,11 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { buildTestPrompt } from "@iwakura/ai-kit";
+import { buildNpcPrompt, buildTestPrompt } from "@iwakura/ai-kit";
 import {
   type AiCallLog,
   type AiStreamEvent,
   AiTestRequestSchema,
   CampaignSaveRequestSchema,
+  NpcTurnRequestSchema,
   SettingsPatchSchema,
 } from "@iwakura/contracts";
 import { Hono } from "hono";
@@ -294,6 +295,121 @@ export function createApp(options: AppOptions): Hono {
         callsRepo.log({
           id: randomUUID(),
           role: "test",
+          model: modelId,
+          promptTokens: inputTokens,
+          completionTokens: outputTokens,
+          costUsd: computeCostUsd(modelId, inputTokens, outputTokens),
+          latencyMs: Date.now() - started,
+          status,
+          ...(errorMessage ? { error: errorMessage } : {}),
+          createdAt: now().toISOString(),
+        });
+      }
+    });
+  });
+
+  app.post("/api/ai/npc", async (c) => {
+    const parsed = NpcTurnRequestSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) {
+      return c.json({ error: "Invalid NPC turn request", code: "invalid_request" }, 400);
+    }
+    const body = parsed.data;
+    const apiKey = keystore.get();
+    if (!apiKey) {
+      return c.json({ error: "OpenCode Go API key is not configured", code: "missing_key" }, 400);
+    }
+    const settings = settingsRepo.get();
+    if (!settings.ai.aiEnabled) {
+      return c.json({ error: "AI is disabled in settings", code: "ai_disabled" }, 409);
+    }
+    const spent = callsRepo.spendThisMonth(now());
+    if (settings.ai.monthlyBudgetUsd > 0 && spent >= settings.ai.monthlyBudgetUsd) {
+      return c.json({ error: "Monthly AI budget reached", code: "budget_exceeded" }, 402);
+    }
+
+    const modelId = body.model ?? settings.ai.npcModel;
+    const prompt = buildNpcPrompt(body);
+    const temperature = body.temperature ?? settings.ai.temperature;
+    const sessionId = body.campaignId
+      ? `campaign:${body.campaignId}:npc:${body.npcId}`
+      : `campaign:npc:${body.npcId}`;
+    const controller = new AbortController();
+    const started = Date.now();
+
+    return streamSSE(c, async (stream) => {
+      stream.onAbort(() => controller.abort());
+      let fullText = "";
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let finishReason = "unknown";
+      let status: AiCallLog["status"] = "ok";
+      let errorMessage: string | undefined;
+      let providerError: unknown;
+      const send = async (event: AiStreamEvent) => {
+        await stream.writeSSE({ data: JSON.stringify(event) });
+      };
+
+      try {
+        await send({ type: "status", message: `${body.persona.name} is considering what to say…` });
+        const result = streamTurn({
+          apiKey,
+          modelId,
+          sessionId,
+          prompt: prompt.user,
+          system: prompt.system,
+          temperature,
+          maxOutputTokens: body.maxOutputTokens ?? 500,
+          signal: controller.signal,
+          onError: (error) => {
+            providerError = error;
+          },
+        });
+        let finished = false;
+        for await (const event of result.events) {
+          switch (event.type) {
+            case "text":
+              fullText += event.text;
+              await send({ type: "delta", text: event.text });
+              break;
+            case "finish":
+              inputTokens = event.usage.inputTokens;
+              outputTokens = event.usage.outputTokens;
+              finishReason = event.finishReason;
+              finished = true;
+              break;
+            case "error":
+              providerError = event.error;
+              throw event.error;
+            case "abort":
+              throw new Error(event.reason ?? "Model stream aborted");
+          }
+        }
+        if (!finished) throw new Error("Model stream ended without a finish event");
+        const costUsd = computeCostUsd(modelId, inputTokens, outputTokens);
+        await send({
+          type: "usage",
+          model: modelId,
+          inputTokens,
+          outputTokens,
+          costUsd,
+          latencyMs: Date.now() - started,
+        });
+        await send({ type: "done", text: fullText, finishReason });
+        logger.info(
+          { npcId: body.npcId, modelId, inputTokens, outputTokens, costUsd, finishReason },
+          "npc turn completed",
+        );
+      } catch (error) {
+        status = controller.signal.aborted ? "aborted" : "error";
+        errorMessage = describeError(providerError ?? error);
+        logger.warn({ error: errorMessage, npcId: body.npcId, modelId }, "npc turn failed");
+        if (status !== "aborted") {
+          await send({ type: "error", message: errorMessage, code: "provider_error" });
+        }
+      } finally {
+        callsRepo.log({
+          id: randomUUID(),
+          role: "npc",
           model: modelId,
           promptTokens: inputTokens,
           completionTokens: outputTokens,

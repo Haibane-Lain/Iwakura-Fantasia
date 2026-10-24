@@ -105,6 +105,32 @@ describe("local server", () => {
     expect(body.code).toBe("missing_key");
   });
 
+  it("refuses an NPC turn without a key", async () => {
+    const response = await app.request("/api/ai/npc", {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        npcId: "core:hessa",
+        persona: {
+          id: "core:hessa",
+          name: "Hessa Vale",
+          role: "Miller",
+          summary: "A miller.",
+          voice: "Blunt.",
+        },
+        worldName: "Redford Reach",
+        regionName: "Redford",
+        timeOfDay: "morning",
+        scene: "The market.",
+        relationship: { trust: 0, affection: 0, respect: 0, fear: 0 },
+        playerUtterance: "What happened at the mill?",
+      }),
+    });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe("missing_key");
+  });
+
   it("logs no calls when nothing was attempted", async () => {
     const response = await app.request("/api/ai/calls", { headers: auth });
     expect(response.status).toBe(200);

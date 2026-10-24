@@ -1,6 +1,6 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** M3 complete; M4 battle vertical slice in progress
+**Status:** M3 complete; M4 and M5 vertical slices in progress; live OpenCode Go verified
 **Last updated:** 2026-10-24
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
@@ -990,19 +990,27 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Victory grants enemy gold; defeat costs 10 gp and leaves the party at 1 hp; retreat returns to the previous local/world state. Battle state persists in the campaign save.
 - Not yet implemented: companion turns, cover, elevation, full condition durations, attack animations, damage previews, and a second battle in the E2E.
 
-### M5 — AI NPCs
+### M5 — AI NPCs (vertical slice)
 
-- [ ] OpenCode Go streaming structured turns.
-- [ ] NPC prompt assembly + persona cards.
-- [ ] Intent schema + validation + repair + fallback.
-- [ ] Memory, summaries, FTS retrieval.
-- [ ] Disposition changes, trade, recruit, combat triggers.
-- [ ] AI offline fallback mode.
-- [ ] AI debug panel v1.
-- [ ] Eval fixtures + forbidden-intent tests.
-- [ ] Cost meter and budget cap.
+- [x] OpenCode Go streaming structured turns through a dedicated `/api/ai/npc` endpoint.
+- [x] NPC prompt assembly + persona cards using the existing `buildNpcPrompt`.
+- [x] Intent schema + validation + repair + fallback. Malformed intents are dropped; valid ones are engine-applied.
+- [~] Memory, summaries, FTS retrieval. Memory writes are stored per NPC and fed back into prompts; summaries and FTS are deferred.
+- [~] Disposition changes, trade, quests, item transfer, and combat triggers. Recruitment and companion reactions are deferred.
+- [x] AI offline fallback mode: authored dialogue remains authoritative; missing key/provider errors surface cleanly.
+- [x] AI debug panel v1 via the AI Lab and call telemetry.
+- [~] Eval fixtures + forbidden-intent tests. Intent repair/validation and server missing-key tests exist; full eval fixtures are deferred.
+- [x] Cost meter and budget cap.
 
-**Exit:** hold a natural conversation, insult an NPC, recruit a companion, get threatened.
+**Exit:** hold a natural conversation, insult an NPC, recruit a companion, get threatened. Partially achieved: natural conversation, disposition/memory changes, trade, quest completion, item transfer, and combat triggers work; recruitment is deferred.
+
+**M5 notes:**
+- `/api/ai/npc` builds the persona prompt server-side, streams the structured JSON response, logs role `npc`, and enforces the key/budget gates.
+- `parseNpcTurn` is lenient: speech is required; malformed intents and memory writes are dropped or repaired, and importance is clamped.
+- `applyNpcTurn` validates intent context before mutation: quest ownership, shop availability, item presence, quest readiness, and battle state.
+- Memory writes are stored in campaign flags and included in later prompts. Conversation summaries and FTS retrieval are not implemented.
+- Live verification: a real OpenCode Go turn streamed in 2.2 s for $0.0001; a live Hessa turn produced a valid AI voice plus engine-applied trust and memory changes.
+- The E2E keystore test now skips when a real key is configured, so local test runs do not delete the developer key.
 
 ### M6 — Director, evolving quests, companions
 
@@ -1137,16 +1145,17 @@ Create these as decisions are implemented:
 
 - Planning: complete.
 - Decisions locked: 8/8.
-- M0: implemented, tested, packaged; only the live-key acceptance turn remains.
+- M0: implemented, tested, packaged, and verified against live OpenCode Go.
 - M1: implemented; procedural and handcrafted worlds generate, validate, render, travel, and save.
 - M2: implemented; characters are built, derived, equipped, inspected, rolled, and saved with the campaign.
 - M3: implemented; towns, NPC schedules, authored dialogue, merchants, quests, and the crypt are playable and saved.
 - M4: vertical slice implemented; initiative, movement, attacks, abilities, enemy AI, retreat, victory rewards, and saved battles work.
-- Next: **finish M4 — Battle** (cover, elevation, companions, animations, second E2E battle), then M5.
+- M5: vertical slice implemented; live structured NPC turns, intent repair/validation, disposition/memory/trade/quest/item/combat effects, and AI telemetry work.
+- Next: **finish M4 and M5** (cover/elevation/companions/animations; summaries/FTS/recruitment/evals), then M6.
 - Blockers: none.
 - Resolved: Electron 45 bundles Node 24.22, so `node:sqlite` works and `better-sqlite3` is unnecessary.
 - Resolved: Pixi 8 works under the strict CSP by importing `pixi.js/unsafe-eval`, which installs the non-eval polyfills.
-- Live key: the OpenCode Go error path was verified with an intentionally invalid key. A successful turn and real cost report require the user's key in Settings → OpenCode Go.
+- Live key: verified. A real OpenCode Go turn streamed through the local gateway, reported usage and cost, and a live NPC turn produced a valid structured response with engine-applied intents. The E2E keystore test skips when a real key is configured.
 
 ### M0 implementation notes
 
