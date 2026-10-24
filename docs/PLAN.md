@@ -1075,7 +1075,7 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Each field map is 40×28 hexes. The renderer keeps smooth sub-hex motion locally; the engine save stores the authoritative anchor hex.
 - Encounters use the current field map, preserve terrain/cover/high ground, and remove defeated groups from the field and future regenerations.
 - Procedural villages still reuse the generic settlement interior; handcrafted towns keep their authored interiors.
-- Current field movement is smooth WASD; local town interiors still use click-to-walk and auto-exit on an exit hex. Manual companion override and patrol schedules remain post-slice.
+- Current field movement is smooth WASD; local town interiors accept WASD step movement or click-to-walk and auto-exit on an exit hex. Manual companion override and patrol schedules remain post-slice.
 
 ---
 

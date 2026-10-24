@@ -26,7 +26,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Handcrafted world packs** with a sample region, Redford Reach, and the same runtime schema as generated worlds.
 - **PixiJS atlas/world map** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and fast travel.
 - **Travel Map**: each world hex expands into a deterministic detailed field map with roads, rivers, forests, settlement outskirts, edge gates, visible enemy groups, and smooth WASD movement.
-- **Organic crossings**: walk through a road edge to enter the neighbouring world hex, or through a settlement gate to load its town map. Leaving a town returns to the same gate.
+- **Organic crossings**: walk through a road edge to enter the neighbouring world hex, or through a settlement gate to load its town map. Town maps accept WASD or click movement; leaving returns to the same gate.
 - **Seamless combat**: visible enemy groups auto-aggro and turn the current Travel Map into the battle field; victory, retreat, and defeat return to the field.
 - **World time and campaign saves**: travel advances the clock, reveals fog, discovers landmarks, and persists through SQLite.
 - **Character creation wizard**: 3 ancestries, 3 classes, 3 backgrounds, point buy, standard array, rolled 4d6 stats, class/background skill choices, appearance, portrait, sigil, name, and pronouns.
@@ -225,7 +225,7 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 - The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.
 - Travel Maps use one detailed map per world hex. Each is deterministic, but currently a single biome-driven layout template; handcrafted landmark silhouettes, weather systems, patrol schedules, and local events are post-slice.
 - Town and dungeon maps use a dedicated local PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
-- Travel Map movement is smooth WASD after the first field is entered. Town interiors still use click-to-walk with automatic exit when an exit hex is reached.
+- Travel Map movement is smooth WASD after the first field is entered. Town interiors also accept WASD step movement or click-to-walk, with automatic exit when an exit hex is reached.
 - Fast travel is available from the atlas and consumes world time; it is not restricted to strictly discovered road segments yet.
 - Handcrafted Redford, Millbrook, and the Old Mill Crypt have authored local maps and NPCs. Procedural settlements share a generic settlement layout and a generic road trader rather than unique generated towns.
 - NPC schedules are hour-granular and computed from the campaign clock. NPCs do not pathfind between spots; they are placed at the active schedule spot when the local map is viewed.

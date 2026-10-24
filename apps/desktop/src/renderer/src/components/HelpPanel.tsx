@@ -6,7 +6,7 @@ import { Panel, SectionLabel } from "./ui";
 const CONTROLS = [
   ["Travel Map", "WASD move · Shift run · walk through gates and road edges · scroll to zoom"],
   ["Atlas", "Drag to pan · inspect roads and landmarks · fast travel on known routes"],
-  ["Local map", "Click a reachable hex to walk · step onto an exit to return to the road"],
+  ["Local map", "WASD or click to walk · step onto an exit to return to the road"],
   ["Dialogue", "Choose authored lines or ask the AI · Esc closes the conversation"],
   ["Battle", "Click a reachable hex to move · select an enemy · Attack or use an ability"],
   ["Journal", "Track objectives, rumors, faction standing, and the chronicle recap"],

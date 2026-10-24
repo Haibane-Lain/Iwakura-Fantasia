@@ -41,7 +41,7 @@ import {
   Swords,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CharacterSheet } from "../components/CharacterSheet";
 import { DialoguePanel } from "../components/DialoguePanel";
 import { LocalCanvas } from "../components/LocalCanvas";
@@ -71,12 +71,48 @@ export function LocalScreen() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingEncounter, setPendingEncounter] = useState<LocalEncounter | null>(null);
+  const moveRef = useRef<(hex: Hex) => void>(() => undefined);
+  const lastStep = useRef(0);
 
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (dialogueNpcId || shopId || journalOpen || sheetOpen || pendingEncounter) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      const directions: Record<string, { q: number; r: number }> = {
+        w: { q: 0, r: -1 },
+        e: { q: 1, r: -1 },
+        a: { q: -1, r: 0 },
+        d: { q: 1, r: 0 },
+        q: { q: -1, r: 1 },
+        s: { q: 0, r: 1 },
+      };
+      const direction = directions[event.key.toLowerCase()];
+      if (!direction) return;
+      event.preventDefault();
+      const now = Date.now();
+      if (now - lastStep.current < 130) return;
+      lastStep.current = now;
+      const position = campaign?.local?.position;
+      if (!position) return;
+      moveRef.current({ q: position.q + direction.q, r: position.r + direction.r });
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [campaign?.local?.position, dialogueNpcId, journalOpen, pendingEncounter, sheetOpen, shopId]);
 
   const local = campaign?.local;
   const presences = useMemo(() => (campaign ? npcsInLocalMap(campaign) : []), [campaign]);
@@ -140,6 +176,7 @@ export function LocalScreen() {
       setScreen("world");
     }
   };
+  moveRef.current = moveTo;
 
   const openDialogue = (npcId: string) => {
     const start = startDialogue(campaign, npcId);
@@ -307,7 +344,7 @@ export function LocalScreen() {
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <Footprints className="size-3.5 text-gold/60" />
             <span>
-              Click a hex to walk · scroll to zoom ·{" "}
+              WASD walk · click a hex · scroll to zoom ·{" "}
               {extra ? `${extra.name} under cursor` : "inspect the town"}
             </span>
           </div>
