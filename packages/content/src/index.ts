@@ -4,6 +4,7 @@ import type {
   Background,
   CharacterClass,
   EnemyDefinition,
+  FactionDefinition,
   Item,
 } from "@iwakura/contracts";
 
@@ -479,6 +480,28 @@ export const ENEMIES: EnemyDefinition[] = [
 
 export function getEnemy(id: string): EnemyDefinition | undefined {
   return ENEMIES.find((entry) => entry.id === id);
+}
+
+export const FACTIONS: FactionDefinition[] = [
+  {
+    id: "core:redford_watch",
+    name: "Redford Watch",
+    description: "The gate guard and road patrols of Redford. They value quiet roads and clean reports.",
+  },
+  {
+    id: "core:millers_compact",
+    name: "Millers' Compact",
+    description: "The millers and river traders who keep the valley fed. They remember debts and favors.",
+  },
+  {
+    id: "core:greywatch_circle",
+    name: "Greywatch Circle",
+    description: "A quiet circle of scholars and wardens who tend the old seals under the hills.",
+  },
+];
+
+export function getFaction(id: string): FactionDefinition | undefined {
+  return FACTIONS.find((entry) => entry.id === id);
 }
 
 export const CONTENT = {

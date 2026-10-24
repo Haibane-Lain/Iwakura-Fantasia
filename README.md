@@ -4,9 +4,9 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** M3 complete. M4 battle vertical slice and M5 structured NPC AI vertical slice in progress. Live OpenCode Go turns verified.
+**Status:** All milestones M0–M7 complete. Vertical slice packaged, installer built, and live OpenCode Go verified.
 **Platform:** Windows desktop, Electron.
-**Full plan:** [docs/PLAN.md](docs/PLAN.md)
+**Full plan:** [docs/PLAN.md](docs/PLAN.md) · **Acceptance:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
 ![Iwakura Fantasia main menu](docs/images/main-menu.png)
 
@@ -39,8 +39,11 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Battle vertical slice**: initiative order, rounds, movement, melee attacks, class abilities, focus costs, shield/condition handling, simple enemy utility AI, victory/defeat/retreat, gold rewards, and a saved battle state. Encounter prompts start battles from the road or a dungeon.
 - **Structured NPC AI turns**: a dedicated `/api/ai/npc` endpoint assembles the persona prompt, streams JSON from OpenCode Go, repairs common malformed intents, and validates every intent against the engine before applying disposition, memory, trade, quest, item, or combat changes.
 - **Live AI verified**: a real OpenCode Go turn streamed through the local gateway at 2.2 s and $0.0001, and a live Hessa turn produced a valid AI voice plus engine-applied trust and memory changes.
-- **Tests**: Vitest for hex/RNG/worldgen/character/content/local maps/NPC schedules/dialogue/quests/trade/battle/NPC intent repair/AI prompt/server routes (83 tests), and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
-- **Packaged Windows build** via electron-builder (`--dir` smoke test): about 4 MB `app.asar`, no native modules.
+- **Director and evolving quests**: validated director operations, procedural work templates, faction/rumor reactions, branching Greywatch outcomes, and a deterministic quest recap.
+- **Companions**: Wren can be recruited, fights on her own turn, comments at camp, tracks approval, can be dismissed, and participates in romance gates.
+- **Save and polish**: three manual save slots, JSON export/import, autosave, keyboard/accessibility pass, field guide, generated audio/VFX, high contrast, reduced motion, custom Windows icon, and NSIS installer.
+- **Tests**: 94 Vitest tests and a Playwright Electron smoke test covering world and character creation, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
+- **Packaged Windows build** via electron-builder: 4.27 MB `app.asar`, no native modules. `pnpm package:installer` produces a 112 MB NSIS setup executable with the custom icon.
 
 ![AI Lab](docs/images/ai-lab.png)
 
@@ -70,6 +73,14 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 ![Live NPC AI turn with engine-validated intents](docs/images/npc-ai.png)
 
+![Companions and approval](docs/images/companion.png)
+
+![Rumors, factions, and generated work](docs/images/journal-rumors.png)
+
+![Field guide](docs/images/help.png)
+
+![Save slots and accessibility settings](docs/images/settings-saves.png)
+
 ---
 
 ## Quick start
@@ -92,8 +103,9 @@ Then:
 5. Walk onto Redford or Millbrook and use **Enter** to switch to the local hex map. Talk to people, trade, rest, wait, and open the **Journal**.
 6. Accept Hessa's quest in Redford, travel to the Old Mill Crypt, recover the ledger, and return to her. The quest reveals the crypt on the world map.
 7. In the crypt, walk into the shade encounter. The ambush panel offers **Fight** or **Avoid**. A battle uses initiative, movement, attacks, abilities, and retreat.
-8. Open the **Character** sheet to inspect stats, equipment, and roll skill checks.
-9. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab or the dialogue AI hook.
+8. Open the **Character** sheet to inspect stats, equipment, companions, and roll skill checks.
+9. Recruit Wren in Millbrook, look for generated work from the **Journal**, and use save slots or export/import in **Settings**.
+10. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab or the dialogue AI hook.
 
 Without a key, the world and saves still work. AI actions return a clear configuration error instead of blocking the UI.
 
@@ -194,7 +206,7 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Current limitations
 
-- Battle is a playable vertical slice: initiative, movement, attacks, several class abilities, shield/LOS handling, enemy move-and-attack AI, victory/defeat/retreat, rewards, and saved state. Cover, elevation, full conditions, companion turns, animations, and the complete action economy remain.
+- Battle is a playable vertical slice: initiative, movement, attacks, class abilities, cover/high ground, LOS, shield, companion AI turns, enemy AI, VFX, victory/defeat/retreat, rewards, and saved state. Full condition durations, manual companion override, damage previews, and richer enemy tactics remain post-slice.
 - Battle maps reuse the local hex renderer. Dungeon battles use the current local map; road battles generate an arena from the current terrain.
 - Character progression currently stops at level 1. Subclasses, feats, level-up UI, and level 5+ content are not implemented yet.
 - Standard array is assigned through six selects; rolled stats are auto-assigned by class priority. Drag-and-drop stat assignment and manual rolled assignment are deferred.
@@ -205,17 +217,19 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 - Town and dungeon maps use a dedicated local PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
 - Handcrafted Redford, Millbrook, and the Old Mill Crypt have authored local maps and NPCs. Procedural settlements share a generic settlement layout and a generic road trader rather than unique generated towns.
 - NPC schedules are hour-granular and computed from the campaign clock. NPCs do not pathfind between spots; they are placed at the active schedule spot when the local map is viewed.
-- The NPC AI path now assembles persona prompts, streams structured JSON, repairs malformed intents, and applies validated disposition, memory, trade, quest, item, and combat intents. Conversation summaries, FTS retrieval, recruitment, and companion reactions remain M5/M6 work.
-- Quests are authored, linear state machines with reach/interact objectives. Quest templates, branching, factions, and world reactions are M6 work.
+- NPC memory uses lexical retrieval and deterministic summaries, not an embedding index or SQLite FTS5. AI recruitment offers remain a player-confirmed authored action.
+- Quests include authored state machines, branching, procedural work templates, factions, rumors, and a recap. Quest content is still a small vertical slice.
 - The handcrafted world currently generates its roads through the same terrain-aware network builder; authored road paths are supported by the schema but not used by the sample pack.
-- `pnpm package` produces an unpacked Windows build; the NSIS installer target is configured but not yet signed or branded with a custom icon.
+- `pnpm package:installer` builds the NSIS installer with a custom icon. The installer is unsigned, and the app is not code-signed or notarized.
 - Live OpenCode Go turns are verified (streaming, usage, and cost). The E2E keystore test is skipped when a real key is configured so local runs do not delete it.
 - OpenCode Go is intended for coding-agent traffic. Treat it as a development/personal provider and keep the adapter swappable before shipping.
 
 ---
 
-## Next milestone: finish M4 and M5
+## Post-slice roadmap
 
-- M4: cover, elevation, companion turns, animations, richer enemy tactics, and a second battle/victory path in the E2E.
-- M5: conversation summaries, FTS memory retrieval, recruitment/companion reactions, eval fixtures for forbidden intents, and stronger offline fallback.
-- Then M6: director-driven quests, evolving quest branches, factions, and companion approval.
+- More handcrafted regions, towns, interiors, and dungeon encounters.
+- Deeper combat: full conditions, reactions, manual companion control, and richer enemy tactics.
+- More procedural quest templates, faction arcs, companions, and romance content.
+- Optional SQLite FTS5 or embedding memory, plus stronger AI evaluation fixtures.
+- Code signing, auto-update, localization, controller support, and a dedicated inference provider.

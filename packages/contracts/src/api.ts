@@ -29,20 +29,33 @@ export const AiSettingsSchema = z.object({
 });
 export type AiSettings = z.infer<typeof AiSettingsSchema>;
 
+export const AudioSettingsSchema = z.object({
+  masterVolume: z.number().min(0).max(1).default(0.55),
+  sfxVolume: z.number().min(0).max(1).default(0.7),
+  ambienceVolume: z.number().min(0).max(1).default(0.35),
+});
+export type AudioSettings = z.infer<typeof AudioSettingsSchema>;
+
 export const AppSettingsSchema = z.object({
   ai: AiSettingsSchema.prefault({}),
+  audio: AudioSettingsSchema.prefault({}),
   contentRating: ContentRatingSchema.default("teen"),
   difficulty: DifficultySchema.default("normal"),
   reduceMotion: z.boolean().default(false),
+  highContrast: z.boolean().default(false),
+  showTooltips: z.boolean().default(true),
   uiScale: z.number().min(0.8).max(1.5).default(1),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 
 export const SettingsPatchSchema = z.object({
   ai: AiSettingsSchema.partial().optional(),
+  audio: AudioSettingsSchema.partial().optional(),
   contentRating: ContentRatingSchema.optional(),
   difficulty: DifficultySchema.optional(),
   reduceMotion: z.boolean().optional(),
+  highContrast: z.boolean().optional(),
+  showTooltips: z.boolean().optional(),
   uiScale: z.number().min(0.8).max(1.5).optional(),
   apiKey: z.string().min(8).max(500).optional(),
   clearApiKey: z.boolean().optional(),

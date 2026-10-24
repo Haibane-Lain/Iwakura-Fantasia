@@ -4,6 +4,7 @@ import type {
   AiTestRequest,
   AppSettings,
   CampaignResponse,
+  CampaignSlotsResponse,
   GameState,
   HealthResponse,
   ModelInfo,
@@ -93,6 +94,22 @@ export class ApiClient {
 
   clearCampaign(): Promise<{ ok: boolean }> {
     return this.request("DELETE", "/api/campaign");
+  }
+
+  getCampaignSlots(): Promise<CampaignSlotsResponse> {
+    return this.request("GET", "/api/campaign/slots");
+  }
+
+  saveCampaignSlot(slot: string): Promise<{ ok: boolean; updatedAt: string; slot: string }> {
+    return this.request("POST", `/api/campaign/slots/${slot}`);
+  }
+
+  loadCampaignSlot(slot: string): Promise<CampaignResponse> {
+    return this.request("POST", `/api/campaign/slots/${slot}/load`);
+  }
+
+  deleteCampaignSlot(slot: string): Promise<{ ok: boolean }> {
+    return this.request("DELETE", `/api/campaign/slots/${slot}`);
   }
 
   async streamAiTest(

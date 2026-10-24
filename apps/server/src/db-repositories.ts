@@ -107,8 +107,8 @@ export class AiCallRepository {
 export class CampaignRepository {
   constructor(private readonly db: Db) {}
 
-  get(): { state: GameState; updatedAt: string } | null {
-    const row = this.db.prepare("SELECT state_json, updated_at FROM campaigns WHERE id = 'active'").get() as
+  get(id = "active"): { state: GameState; updatedAt: string } | null {
+    const row = this.db.prepare("SELECT state_json, updated_at FROM campaigns WHERE id = ?").get(id) as
       | { state_json: string; updated_at: string }
       | undefined;
     if (!row) return null;
@@ -119,24 +119,69 @@ export class CampaignRepository {
     }
   }
 
-  save(state: GameState): string {
+  save(state: GameState, id = "active"): string {
     const now = new Date().toISOString();
     this.db
       .prepare(
         `INSERT INTO campaigns (id, name, world_source, state_json, created_at, updated_at)
-         VALUES ('active', ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            world_source = excluded.world_source,
            state_json = excluded.state_json,
            updated_at = excluded.updated_at`,
       )
-      .run(state.campaign.name, state.world.source, JSON.stringify(state), now, now);
+      .run(id, state.campaign.name, state.world.source, JSON.stringify(state), now, now);
     return now;
   }
 
-  clear(): void {
-    this.db.prepare("DELETE FROM campaigns WHERE id = 'active'").run();
+  clear(id = "active"): void {
+    this.db.prepare("DELETE FROM campaigns WHERE id = ?").run(id);
+  }
+
+  listSlots(): Array<{
+    id: string;
+    name: string;
+    worldSource: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT id, name, world_source, created_at, updated_at FROM campaigns
+         WHERE id LIKE 'slot:%' ORDER BY id ASC`,
+      )
+      .all() as Array<{
+      id: string;
+      name: string;
+      world_source: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return rows.map((row) => ({
+      id: row.id.replace(/^slot:/, ""),
+      name: row.name,
+      worldSource: row.world_source,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  saveSlot(slotId: string): string | null {
+    const active = this.get();
+    if (!active) return null;
+    return this.save(active.state, `slot:${slotId}`);
+  }
+
+  loadSlot(slotId: string): { state: GameState; updatedAt: string } | null {
+    const slot = this.get(`slot:${slotId}`);
+    if (!slot) return null;
+    this.save(slot.state, "active");
+    return slot;
+  }
+
+  deleteSlot(slotId: string): void {
+    this.clear(`slot:${slotId}`);
   }
 }
 

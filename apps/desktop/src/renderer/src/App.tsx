@@ -1,6 +1,8 @@
 import { AlertTriangle, Hexagon, RefreshCw } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { applyAppearance, playClick } from "./audio";
 import { AppHeader } from "./components/AppHeader";
+import { HelpPanel } from "./components/HelpPanel";
 import { AiLab } from "./screens/AiLab";
 import { CharacterCreation } from "./screens/CharacterCreation";
 import { MainMenu } from "./screens/MainMenu";
@@ -57,6 +59,7 @@ export default function App() {
   const bootError = useAppStore((state) => state.bootError);
   const campaign = useAppStore((state) => state.campaign);
   const pendingWorld = useAppStore((state) => state.pendingWorld);
+  const settings = useAppStore((state) => state.settings);
   const init = useAppStore((state) => state.init);
   const started = useRef(false);
 
@@ -65,6 +68,22 @@ export default function App() {
     started.current = true;
     void init();
   }, [init]);
+
+  useEffect(() => {
+    if (!settings) return;
+    applyAppearance({
+      uiScale: settings.settings.uiScale,
+      reduceMotion: settings.settings.reduceMotion,
+      highContrast: settings.settings.highContrast,
+    });
+    const handler = (event: MouseEvent) => {
+      const button = (event.target as HTMLElement | null)?.closest("button");
+      if (!button || button.disabled) return;
+      playClick(settings.settings.audio.masterVolume, settings.settings.audio.sfxVolume);
+    };
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [settings]);
 
   if (loading) return <BootScreen />;
   if (bootError) return <BootError message={bootError} />;
@@ -80,6 +99,7 @@ export default function App() {
         {screen === "lab" ? <AiLab /> : null}
         {screen === "settings" ? <SettingsScreen /> : null}
       </main>
+      <HelpPanel />
     </div>
   );
 }

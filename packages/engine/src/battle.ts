@@ -90,6 +90,10 @@ function arenaMap(state: GameState): LocalMap {
     set(5, 2, "stone_wall");
     set(6, 2, "stone_wall");
     set(9, 6, "stone_wall");
+    set(4, 3, "high_ground");
+    set(8, 3, "high_ground");
+    set(4, 5, "high_ground");
+    set(8, 5, "high_ground");
   }
   set(9, 3, dry ? "field" : "grass");
   set(6, 6, "field");
@@ -210,7 +214,38 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
   }
   if (enemies.length === 0) return null;
 
-  const units = [playerUnit, ...enemies].sort((a, b) => b.initiative - a.initiative);
+  const companionCandidates = freeHexes(map, playerPos, 2).filter((hex) => !occupied.has(hexKey(hex)));
+  let companionIndex = 0;
+  const companions: BattleUnit[] = [];
+  for (const memberId of state.party.memberIds) {
+    if (memberId === player.id) continue;
+    const entity = state.entities[memberId];
+    if (!entity?.companion) continue;
+    const position = companionCandidates[companionIndex] ?? playerPos;
+    companionIndex += 1;
+    occupied.add(hexKey(position));
+    companions.push({
+      id: `companion:${entity.id}`,
+      entityId: entity.id,
+      name: entity.name,
+      team: "party",
+      kind: "companion",
+      hp: entity.hp.current,
+      maxHp: entity.hp.max,
+      ac: entity.ac,
+      speed: entity.speed,
+      initiative: rng.d20() + abilityModifier(entity.attributes.dex),
+      position,
+      moved: 0,
+      actionUsed: false,
+      bonusUsed: false,
+      defeated: false,
+      palette: entity.appearance?.palette ?? "moss",
+      conditions: [],
+    });
+  }
+
+  const units = [playerUnit, ...companions, ...enemies].sort((a, b) => b.initiative - a.initiative);
   const active = units[0]!;
   const order = units.map((unit) => ({
     entityId: unit.entityId ?? unit.id,
@@ -324,6 +359,22 @@ function activePlayer(battle: BattleState): BattleUnit | undefined {
   return unit?.kind === "player" ? unit : undefined;
 }
 
+function coverBonus(battle: BattleState, unit: BattleUnit): number {
+  const map = battle.map;
+  if (!map) return 0;
+  return neighbors(unit.position).some((hex) => {
+    const tile = battleMapTile(map, hex);
+    return tile === "tree" || tile === "stone_wall" || tile === "crate";
+  })
+    ? 2
+    : 0;
+}
+
+function highGroundBonus(battle: BattleState, unit: BattleUnit): number {
+  const map = battle.map;
+  return map && battleMapTile(map, unit.position) === "high_ground" ? 1 : 0;
+}
+
 export function battleMove(state: GameState, to: Hex): GameState | null {
   const battle = state.battle;
   if (battle?.status !== "active") return null;
@@ -362,15 +413,17 @@ export function battleAttack(state: GameState, targetId: string): GameState | nu
   const rng = rngFromGameState(state);
   const bonus =
     proficiencyBonus(state.entities.player?.level ?? 1) +
-    abilityModifier(state.entities.player?.attributes.str ?? 10);
+    abilityModifier(state.entities.player?.attributes.str ?? 10) +
+    highGroundBonus(battle, attacking);
   const roll = rng.d20();
   const total = roll + bonus;
   const crit = roll === 20;
   const player = state.entities.player;
   const weapon = player?.equipment.mainHand ? getItem(player.equipment.mainHand) : undefined;
   const dice = String(weapon?.stats.damage ?? "1d4");
+  const targetAc = target.ac + coverBonus(battle, target);
   const damage =
-    total >= target.ac
+    total >= targetAc
       ? rollDice(rng, dice, abilityModifier(player?.attributes.str ?? 10)) * (crit ? 2 : 1)
       : 0;
   const hp = Math.max(0, target.hp - damage);
@@ -387,7 +440,9 @@ export function battleAttack(state: GameState, targetId: string): GameState | nu
     units,
     log: [
       ...battle.log.slice(-78),
-      `${attacking.name} attacks ${target.name}: d20 ${roll} + ${bonus} = ${total} vs AC ${target.ac}${crit ? " (critical!)" : ""}.`,
+      `${attacking.name} attacks ${target.name}: d20 ${roll} + ${bonus} = ${total} vs AC ${targetAc}${
+        coverBonus(battle, target) > 0 ? " (cover)" : ""
+      }${crit ? " (critical!)" : ""}.`,
       ...(damage > 0
         ? [`${target.name} takes ${damage} damage (${hp}/${target.maxHp} hp).`]
         : ["The attack misses."]),
@@ -500,7 +555,7 @@ export function battleEnemyTurn(state: GameState): GameState | null {
   let units = battle.units;
   const log = [...battle.log.slice(-78)];
   let position = enemy.position;
-  let actionUsed = enemy.actionUsed;
+  const actionUsed = enemy.actionUsed;
   const dist = distance(position, player.position);
   if (dist > 1) {
     const map = battle.map;
@@ -520,16 +575,17 @@ export function battleEnemyTurn(state: GameState): GameState | null {
   }
   if (distance(position, player.position) <= 1 && !actionUsed) {
     const def = getEnemy(enemy.id.split(":").slice(2).join(":"));
-    const bonus = def?.attackBonus ?? 2;
+    const bonus = (def?.attackBonus ?? 2) + highGroundBonus(battle, enemy);
     const dice = def?.damageDice ?? "1d6";
     const damageBonus = def?.damageBonus ?? 0;
     const roll = rng.d20();
     const total = roll + bonus;
-    const targetAc = player.ac + (player.conditions.includes("shielded") ? 5 : 0);
+    const targetAc =
+      player.ac + (player.conditions.includes("shielded") ? 5 : 0) + coverBonus(battle, player);
     const hit = total >= targetAc;
     const damage = hit ? rollDice(rng, dice, damageBonus) : 0;
     const hp = Math.max(0, player.hp - damage);
-    actionUsed = true;
+
     units = units.map((unit) =>
       unit.id === player.id
         ? { ...unit, hp, defeated: hp === 0 }
@@ -553,6 +609,74 @@ export function battleEnemyTurn(state: GameState): GameState | null {
   return appendAndSync(synced, advanceTurn(next));
 }
 
+export function battleCompanionTurn(state: GameState): GameState | null {
+  const battle = state.battle;
+  if (battle?.status !== "active") return null;
+  const companion = activeUnit(battle);
+  if (companion?.kind !== "companion" || companion.defeated) return null;
+  const enemies = livingEnemies(battle);
+  if (enemies.length === 0) return null;
+  const target = enemies.sort(
+    (a, b) => distance(companion.position, a.position) - distance(companion.position, b.position),
+  )[0]!;
+  const rng = rngFromGameState(state);
+  const map = battle.map;
+  let units = battle.units;
+  let position = companion.position;
+  const log = [...battle.log.slice(-78)];
+  if (distance(position, target.position) > 1 && map) {
+    const route = findPath(position, target.position, (hex) => (localIsWalkable(map, hex) ? 1 : null));
+    const steps = route?.path.slice(0, companion.speed) ?? [];
+    for (const step of steps) {
+      if (distance(step, target.position) <= 1) break;
+      position = step;
+    }
+    const moved = distance(companion.position, position);
+    units = units.map((unit) =>
+      unit.id === companion.id ? { ...unit, position, moved: unit.moved + moved } : unit,
+    );
+    if (moved > 0)
+      log.push(`${companion.name} moves to support ${state.entities.player?.name ?? "the party"}.`);
+  }
+
+  if (distance(position, target.position) <= 1) {
+    const entity = companion.entityId ? state.entities[companion.entityId] : undefined;
+    const weapon = entity?.equipment.mainHand ? getItem(entity.equipment.mainHand) : undefined;
+    const bonus =
+      proficiencyBonus(entity?.level ?? 1) +
+      abilityModifier(entity?.attributes.str ?? 10) +
+      highGroundBonus(battle, companion);
+    const roll = rng.d20();
+    const total = roll + bonus;
+    const targetAc = target.ac + coverBonus(battle, target);
+    const hit = total >= targetAc;
+    const damage = hit
+      ? rollDice(rng, String(weapon?.stats.damage ?? "1d6"), abilityModifier(entity?.attributes.str ?? 10))
+      : 0;
+    const hp = Math.max(0, target.hp - damage);
+
+    units = units.map((unit) =>
+      unit.id === target.id
+        ? { ...unit, hp, defeated: hp === 0 }
+        : unit.id === companion.id
+          ? { ...unit, actionUsed: true }
+          : unit,
+    );
+    log.push(
+      `${companion.name} attacks ${target.name}: d20 ${roll} + ${bonus} = ${total} vs AC ${target.ac}. ${
+        hit ? `${damage} damage (${hp}/${target.maxHp} hp).` : "Miss."
+      }`,
+    );
+  } else {
+    log.push(`${companion.name} closes in.`);
+  }
+  let next: BattleState = { ...battle, units, log };
+  next = checkEnd(state, next);
+  const synced = syncRng(state, rng);
+  if (next.status !== "active") return appendAndSync(synced, next);
+  return appendAndSync(synced, advanceTurn(next));
+}
+
 export function retreatBattle(state: GameState): GameState | null {
   const battle = state.battle;
   if (battle?.status !== "active") return null;
@@ -568,6 +692,19 @@ export function finishBattle(state: GameState): GameState | null {
   const playerUnit = battle.units.find((unit) => unit.kind === "player");
   const player = state.entities.player;
   let next: GameState = { ...state, battle: undefined, campaign: timestamp(state) };
+  const entities = { ...state.entities };
+  for (const unit of battle.units) {
+    if (unit.team !== "party" || !unit.entityId) continue;
+    const entity = entities[unit.entityId];
+    if (!entity) continue;
+    entities[unit.entityId] = {
+      ...entity,
+      hp: {
+        ...entity.hp,
+        current: battle.status === "defeat" && unit.kind === "player" ? Math.max(1, unit.hp || 1) : unit.hp,
+      },
+    };
+  }
   if (player && playerUnit) {
     const gold =
       battle.status === "victory"
@@ -578,17 +715,10 @@ export function finishBattle(state: GameState): GameState | null {
     next = {
       ...next,
       party: { ...state.party, gold },
-      entities: {
-        ...state.entities,
-        player: {
-          ...player,
-          hp: {
-            ...player.hp,
-            current: battle.status === "defeat" ? Math.max(1, playerUnit.hp || 1) : playerUnit.hp,
-          },
-        },
-      },
+      entities,
     };
+  } else {
+    next = { ...next, entities };
   }
   return next;
 }

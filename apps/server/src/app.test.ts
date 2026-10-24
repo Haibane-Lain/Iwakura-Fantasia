@@ -184,6 +184,18 @@ describe("local server", () => {
     expect(loadedBody.campaign.world.name).toBe("Redford Reach");
     expect(loadedBody.updatedAt).toBeTruthy();
 
+    const slotSave = await app.request("/api/campaign/slots/1", { method: "POST", headers: auth });
+    expect(slotSave.status).toBe(200);
+    const slots = await app.request("/api/campaign/slots", { headers: auth });
+    const slotsBody = (await slots.json()) as { slots: Array<{ id: string; name: string }> };
+    expect(slotsBody.slots.some((slot) => slot.id === "1")).toBe(true);
+    const slotLoad = await app.request("/api/campaign/slots/1/load", { method: "POST", headers: auth });
+    expect(slotLoad.status).toBe(200);
+    const slotLoaded = (await slotLoad.json()) as { campaign: typeof state };
+    expect(slotLoaded.campaign.campaign.name).toBe("The Redford Chronicle");
+    const slotDelete = await app.request("/api/campaign/slots/1", { method: "DELETE", headers: auth });
+    expect(slotDelete.status).toBe(200);
+
     const clear = await app.request("/api/campaign", { method: "DELETE", headers: auth });
     expect(clear.status).toBe(200);
     const after = await app.request("/api/campaign", { headers: auth });

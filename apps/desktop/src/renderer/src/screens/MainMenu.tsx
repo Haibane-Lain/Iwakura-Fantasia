@@ -72,6 +72,7 @@ export function MainMenu() {
   const modelsSource = useAppStore((state) => state.modelsSource);
   const bootstrap = useAppStore((state) => state.bootstrap);
   const campaign = useAppStore((state) => state.campaign);
+  const setHelpOpen = useAppStore((state) => state.setHelpOpen);
 
   const providerReady = settings?.apiKeyConfigured ?? false;
   const spend = settings?.spendThisMonthUsd ?? 0;
@@ -88,7 +89,9 @@ export function MainMenu() {
           <div className="mb-5 flex items-center gap-3">
             <SectionLabel>A single-player chronicle</SectionLabel>
             <span className="h-px w-16 bg-line" />
-            <span className="text-[10px] uppercase tracking-[0.18em] text-gold/70">M0 · Foundation</span>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-gold/70">
+              M0–M7 · Vertical slice
+            </span>
           </div>
 
           <h1 className="font-display text-6xl leading-[0.92] tracking-[0.02em] text-parchment text-balance md:text-7xl xl:text-[5.4rem]">
@@ -119,6 +122,10 @@ export function MainMenu() {
             <button type="button" className="btn" onClick={() => setScreen("lab")}>
               <FlaskConical className="size-3.5" />
               AI lab
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setHelpOpen(true)}>
+              <BookOpen className="size-3.5" />
+              How to play
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => setScreen("settings")}>
               <KeyRound className="size-3.5" />
@@ -212,12 +219,13 @@ export function MainMenu() {
               <span className="font-mono text-[10px] text-faint">M0 / M7</span>
             </div>
             <div className="mt-2 divide-y divide-line-soft/60">
-              <RoadmapRow label="Foundation, local server, AI gateway" status="active" detail="In progress" />
-              <RoadmapRow label="Hex world, fog, travel" status="later" detail="M1" />
-              <RoadmapRow label="Character creation, content" status="later" detail="M2" />
-              <RoadmapRow label="Towns, NPCs, quests" status="later" detail="M3" />
-              <RoadmapRow label="Tactical battle maps" status="later" detail="M4" />
-              <RoadmapRow label="AI NPCs, memory, Director" status="later" detail="M5–M6" />
+              <RoadmapRow label="Foundation, local server, AI gateway" status="done" detail="M0" />
+              <RoadmapRow label="Hex world, fog, travel" status="done" detail="M1" />
+              <RoadmapRow label="Character creation, content" status="done" detail="M2" />
+              <RoadmapRow label="Towns, NPCs, quests" status="done" detail="M3" />
+              <RoadmapRow label="Tactical battle maps" status="done" detail="M4" />
+              <RoadmapRow label="AI NPCs, memory, Director" status="done" detail="M5–M6" />
+              <RoadmapRow label="Polish, saves, installer" status="done" detail="M7" />
             </div>
           </Panel>
 

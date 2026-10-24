@@ -1,15 +1,19 @@
-import type { AppSettings, ModelInfo } from "@iwakura/contracts";
+import type { AppSettings, CampaignSlotInfo, ModelInfo } from "@iwakura/contracts";
+import { GameStateSchema } from "@iwakura/contracts";
 import {
   AlertTriangle,
   CheckCircle2,
   Cpu,
   Database,
+  Download,
+  FolderOpen,
   KeyRound,
   RefreshCw,
   Save,
   Settings2,
   ShieldCheck,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatUsd } from "../api/client";
@@ -57,18 +61,35 @@ export function SettingsScreen() {
   const applySettings = useAppStore((state) => state.applySettings);
   const refreshHealth = useAppStore((state) => state.refreshHealth);
   const refreshModels = useAppStore((state) => state.refreshModels);
+  const campaign = useAppStore((state) => state.campaign);
+  const setCampaign = useAppStore((state) => state.setCampaign);
+  const saveCampaign = useAppStore((state) => state.saveCampaign);
+  const setScreen = useAppStore((state) => state.setScreen);
 
   const [form, setForm] = useState<AppSettings | null>(settings?.settings ?? null);
   const [keyInput, setKeyInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const [slots, setSlots] = useState<CampaignSlotInfo[]>([]);
 
   useEffect(() => {
     if (settings) setForm(settings.settings);
   }, [settings]);
 
+  useEffect(() => {
+    if (!api) return;
+    void api
+      .getCampaignSlots()
+      .then((result) => setSlots(result.slots))
+      .catch(() => undefined);
+  }, [api]);
+
   const updateAi = <K extends keyof AppSettings["ai"]>(key: K, value: AppSettings["ai"][K]) => {
     setForm((current) => (current ? { ...current, ai: { ...current.ai, [key]: value } } : current));
+  };
+
+  const updateAudio = <K extends keyof AppSettings["audio"]>(key: K, value: AppSettings["audio"][K]) => {
+    setForm((current) => (current ? { ...current, audio: { ...current.audio, [key]: value } } : current));
   };
 
   const save = async () => {
@@ -78,9 +99,12 @@ export function SettingsScreen() {
     try {
       const result = await api.updateSettings({
         ai: form.ai,
+        audio: form.audio,
         contentRating: form.contentRating,
         difficulty: form.difficulty,
         reduceMotion: form.reduceMotion,
+        highContrast: form.highContrast,
+        showTooltips: form.showTooltips,
         uiScale: form.uiScale,
       });
       applySettings(result);
@@ -132,6 +156,81 @@ export function SettingsScreen() {
       setNotice({ tone: "error", text: error instanceof Error ? error.message : String(error) });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const refreshSlots = async () => {
+    if (!api) return;
+    try {
+      const result = await api.getCampaignSlots();
+      setSlots(result.slots);
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const storeSlot = async (slot: string) => {
+    if (!api) return;
+    try {
+      await api.saveCampaignSlot(slot);
+      await refreshSlots();
+      setNotice({ tone: "ok", text: `Campaign saved to slot ${slot}.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const loadSlot = async (slot: string) => {
+    if (!api) return;
+    if (!window.confirm(`Load slot ${slot}? Unsaved progress in the active chronicle will be replaced.`))
+      return;
+    try {
+      const result = await api.loadCampaignSlot(slot);
+      if (!result.campaign) throw new Error("Slot is empty.");
+      setCampaign(result.campaign);
+      setNotice({ tone: "ok", text: `Loaded slot ${slot}.` });
+      setScreen("world");
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const removeSlot = async (slot: string) => {
+    if (!api) return;
+    if (!window.confirm(`Delete slot ${slot}?`)) return;
+    try {
+      await api.deleteCampaignSlot(slot);
+      await refreshSlots();
+      setNotice({ tone: "info", text: `Slot ${slot} deleted.` });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const exportCampaign = () => {
+    if (!campaign) return;
+    const blob = new Blob([JSON.stringify(campaign, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `iwakura-${campaign.campaign.name.replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setNotice({ tone: "ok", text: "Campaign exported." });
+  };
+
+  const importCampaign = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error("Campaign files are limited to 5 MB.");
+      const parsed = GameStateSchema.safeParse(JSON.parse(await file.text()));
+      if (!parsed.success) throw new Error("That file is not a valid Iwakura campaign.");
+      await saveCampaign(parsed.data);
+      setCampaign(parsed.data);
+      setNotice({ tone: "ok", text: "Campaign imported." });
+      setScreen("world");
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : String(error) });
     }
   };
 
@@ -415,6 +514,55 @@ export function SettingsScreen() {
                   className="size-4 accent-[#c9a35a]"
                 />
               </label>
+              <label className="flex items-end justify-between gap-3 pb-1 text-xs text-parchment-dim">
+                <span>High contrast</span>
+                <input
+                  type="checkbox"
+                  checked={form.highContrast}
+                  onChange={(event) => setForm({ ...form, highContrast: event.target.checked })}
+                  className="size-4 accent-[#c9a35a]"
+                />
+              </label>
+              <label className="flex items-end justify-between gap-3 pb-1 text-xs text-parchment-dim">
+                <span>Show tooltips</span>
+                <input
+                  type="checkbox"
+                  checked={form.showTooltips}
+                  onChange={(event) => setForm({ ...form, showTooltips: event.target.checked })}
+                  className="size-4 accent-[#c9a35a]"
+                />
+              </label>
+            </div>
+            <div className="mt-4 border-t border-line-soft pt-4">
+              <SectionLabel>Audio</SectionLabel>
+              <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                {(
+                  [
+                    ["masterVolume", "Master"],
+                    ["sfxVolume", "Effects"],
+                    ["ambienceVolume", "Ambience"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key}>
+                    <label className="label" htmlFor={`audio-${key}`}>
+                      {label} <span className="text-gold/80">{Math.round(form.audio[key] * 100)}%</span>
+                    </label>
+                    <input
+                      id={`audio-${key}`}
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={form.audio[key]}
+                      onChange={(event) => updateAudio(key, Number(event.target.value))}
+                      className="w-full accent-[#c9a35a]"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1 text-[9px] text-faint">
+                Sounds are generated locally with WebAudio; no audio assets or remote requests.
+              </p>
             </div>
             <p className="mt-4 text-[10px] leading-5 text-faint">
               Content settings are enforced at the prompt and intent layers. They are not a substitute for
@@ -458,6 +606,94 @@ export function SettingsScreen() {
               Single-player only. No telemetry, no account, no cloud sync. Saves and AI transcripts stay in
               the local SQLite database.
             </p>
+          </Panel>
+
+          <Panel className="p-5 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="size-4 text-gold/80" />
+                <SectionLabel>Chronicle saves</SectionLabel>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className="btn" onClick={exportCampaign} disabled={!campaign}>
+                  <Download className="size-3.5" />
+                  Export
+                </button>
+                <label className="btn cursor-pointer">
+                  <Upload className="size-3.5" />
+                  Import
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(event) => void importCampaign(event.target.files?.[0])}
+                  />
+                </label>
+                <button type="button" className="btn" onClick={() => void refreshSlots()}>
+                  <RefreshCw className="size-3.5" />
+                  Refresh slots
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-[10px] leading-5 text-faint">
+              The active chronicle autosaves after travel, dialogue, trade, and battle. Slots are manual
+              snapshots stored in the local database.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {[1, 2, 3].map((slotNumber) => {
+                const slot = slots.find((entry) => entry.id === String(slotNumber));
+                return (
+                  <div key={slotNumber} className="border border-line-soft bg-black/10 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-display text-sm text-parchment">Slot {slotNumber}</span>
+                      <span
+                        className={cn("chip text-[9px]", slot ? "border-moss/40 text-moss" : "text-faint")}
+                      >
+                        {slot ? "saved" : "empty"}
+                      </span>
+                    </div>
+                    {slot ? (
+                      <>
+                        <div className="mt-1 truncate text-[11px] text-parchment-dim">{slot.name}</div>
+                        <div className="text-[9px] text-faint">
+                          {slot.worldSource} · {new Date(slot.updatedAt).toLocaleString()}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-1 text-[10px] text-faint">No snapshot yet.</div>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className="btn px-2! py-0.5! text-[9px]!"
+                        onClick={() => void storeSlot(String(slotNumber))}
+                        disabled={!campaign}
+                      >
+                        <Save className="size-3" />
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        className="btn px-2! py-0.5! text-[9px]!"
+                        onClick={() => void loadSlot(String(slotNumber))}
+                        disabled={!slot}
+                      >
+                        <FolderOpen className="size-3" />
+                        Load
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost px-2! py-0.5! text-[9px]!"
+                        onClick={() => void removeSlot(String(slotNumber))}
+                        disabled={!slot}
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </Panel>
         </div>
       </div>

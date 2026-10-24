@@ -6,9 +6,10 @@ import {
   applyNpcTurn,
   dialogueRootForNpc,
   npcAppearance,
-  npcMemories,
   npcRelationship,
   npcsInLocalMap,
+  recordConversationSummary,
+  retrieveNpcMemories,
   timeOfDay,
 } from "@iwakura/engine";
 import { ArrowRight, Check, Loader2, MessageCircle, Send, Sparkles, UserRound, X } from "lucide-react";
@@ -128,7 +129,7 @@ export function DialoguePanel({
             campaign.local?.map.description ?? campaign.world.name
           }`,
           relationship,
-          memories: npcMemories(campaign, npc.id),
+          memories: retrieveNpcMemories(campaign, npc.id, utterance.trim()),
           transcript: history.slice(-6),
           playerUtterance: utterance.trim(),
           contentRating: campaign.campaign.settings.contentRating,
@@ -144,7 +145,9 @@ export function DialoguePanel({
       const parsed = parseNpcTurn(text);
       if (parsed.ok) {
         const applied = applyNpcTurn(campaign, npc.id, parsed.value);
-        if (applied.state !== campaign) await saveCampaign(applied.state);
+        const summary = `Player: ${utterance.trim().slice(0, 180)} | ${npc.name}: ${parsed.value.speech.slice(0, 180)}`;
+        const withSummary = recordConversationSummary(applied.state, npc.id, summary);
+        if (withSummary !== campaign) await saveCampaign(withSummary);
         const notes = [...parsed.warnings, ...applied.events, ...applied.rejected];
         setAiEvents(notes);
         if (notes.length > 0) onToast(notes.join(" "), applied.rejected.length > 0 ? "warn" : "info");

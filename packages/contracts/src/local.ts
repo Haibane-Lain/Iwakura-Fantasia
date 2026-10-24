@@ -102,6 +102,14 @@ export const DialogueActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("accept_quest"), questId: z.string().min(1) }),
   z.object({ type: z.literal("claim_quest"), questId: z.string().min(1) }),
   z.object({ type: z.literal("open_shop"), shopId: z.string().min(1) }),
+  z.object({ type: z.literal("recruit_companion") }),
+  z.object({ type: z.literal("dismiss_companion") }),
+  z.object({
+    type: z.literal("branch_quest"),
+    questId: z.string().min(1),
+    branchId: z.string().min(1),
+  }),
+  z.object({ type: z.literal("romance") }),
   z.object({
     type: z.literal("adjust_disposition"),
     axis: z.enum(["trust", "affection", "respect", "fear"]),
@@ -193,3 +201,14 @@ export const QuestTemplateSchema = z.object({
   rewards: QuestRewardSchema.default({ gold: 0, itemIds: [] }),
 });
 export type QuestTemplate = z.infer<typeof QuestTemplateSchema>;
+
+export const QuestWorkTemplateSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1).max(120),
+  summary: z.string().min(1).max(1200),
+  objectiveKind: z.enum(["reach", "interact", "kill", "collect", "escort", "survive", "choice", "timer"]),
+  targetKinds: z.array(z.enum(["town", "village", "dungeon", "ruin", "shrine", "camp", "landmark"])).min(1),
+  rewardGold: z.number().int().min(0).max(500).default(15),
+  factionId: z.string().optional(),
+});
+export type QuestWorkTemplate = z.infer<typeof QuestWorkTemplateSchema>;

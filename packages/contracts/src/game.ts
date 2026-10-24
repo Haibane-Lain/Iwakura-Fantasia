@@ -339,6 +339,15 @@ export const FactionStateSchema = z.object({
 });
 export type FactionState = z.infer<typeof FactionStateSchema>;
 
+export const RumorSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1).max(600),
+  sourceId: z.string().optional(),
+  createdAt: z.string(),
+  read: z.boolean().default(false),
+});
+export type Rumor = z.infer<typeof RumorSchema>;
+
 export const BattleParticipantSchema = z.object({
   entityId: z.string(),
   initiative: z.number().int(),
@@ -349,7 +358,7 @@ export const BattleUnitSchema = z.object({
   entityId: z.string().optional(),
   name: z.string().min(1),
   team: z.enum(["party", "enemy", "neutral"]),
-  kind: z.enum(["player", "enemy"]).default("enemy"),
+  kind: z.enum(["player", "companion", "enemy"]).default("enemy"),
   hp: z.number().int().min(0),
   maxHp: z.number().int().min(1),
   ac: z.number().int().min(1).max(40),
@@ -403,6 +412,7 @@ export const GameStateSchema = z.object({
   entities: z.record(z.string(), EntitySchema).default({}),
   quests: z.record(z.string(), QuestStateSchema).default({}),
   factions: z.record(z.string(), FactionStateSchema).default({}),
+  rumors: z.array(RumorSchema).default([]),
   relationships: z.record(z.string(), RelationshipSchema).default({}),
   flags: z.record(z.string(), z.unknown()).default({}),
   local: LocalStateSchema.optional(),
@@ -426,6 +436,20 @@ export const CampaignResponseSchema = z.object({
   updatedAt: z.string().nullable(),
 });
 export type CampaignResponse = z.infer<typeof CampaignResponseSchema>;
+
+export const CampaignSlotInfoSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  worldSource: z.string().min(1),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CampaignSlotInfo = z.infer<typeof CampaignSlotInfoSchema>;
+
+export const CampaignSlotsResponseSchema = z.object({
+  slots: z.array(CampaignSlotInfoSchema),
+});
+export type CampaignSlotsResponse = z.infer<typeof CampaignSlotsResponseSchema>;
 
 export const GameCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("party.move"), to: HexSchema, cost: z.number().int().min(0).optional() }),

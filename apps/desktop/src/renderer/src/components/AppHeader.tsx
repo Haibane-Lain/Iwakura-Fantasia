@@ -1,4 +1,4 @@
-import { FlaskConical, Globe2, Hexagon, Map as MapIcon, Settings, Sparkles } from "lucide-react";
+import { CircleHelp, FlaskConical, Globe2, Hexagon, Map as MapIcon, Settings, Sparkles } from "lucide-react";
 import { type Screen, useAppStore } from "../state/useAppStore";
 import { cn } from "./ui";
 
@@ -17,8 +17,10 @@ export function AppHeader() {
   const settings = useAppStore((state) => state.settings);
   const bootstrap = useAppStore((state) => state.bootstrap);
   const campaign = useAppStore((state) => state.campaign);
+  const setHelpOpen = useAppStore((state) => state.setHelpOpen);
 
   const keyReady = settings?.apiKeyConfigured ?? false;
+  const tooltips = settings?.settings.showTooltips ?? true;
 
   return (
     <header className="drag-region relative z-20 flex h-16 shrink-0 items-center justify-between border-b border-line-soft bg-ink/80 px-5 backdrop-blur-md">
@@ -56,6 +58,7 @@ export function AppHeader() {
               key={item.id}
               className={cn("nav-link flex items-center gap-1.5", screen === item.id && "nav-link-active")}
               onClick={() => setScreen(item.id === "world" && !campaign ? "campaign" : item.id)}
+              title={tooltips ? `Open ${item.label}` : undefined}
             >
               <Icon className="size-3" strokeWidth={1.5} />
               {item.label}
@@ -65,6 +68,15 @@ export function AppHeader() {
       </nav>
 
       <div className="no-drag flex items-center gap-3">
+        <button
+          type="button"
+          className="btn btn-ghost px-2! py-1!"
+          onClick={() => setHelpOpen(true)}
+          title="How to play"
+          aria-label="How to play"
+        >
+          <CircleHelp className="size-4" />
+        </button>
         <span className="chip hidden lg:inline-flex">
           <span className={cn("size-1.5 rounded-full", health?.ok ? "bg-moss" : "bg-blood")} />
           Local engine

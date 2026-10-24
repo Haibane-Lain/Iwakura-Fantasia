@@ -69,6 +69,15 @@ export function createApp(options: AppOptions): Hono {
   const cacheRepo = new ModelCacheRepository(db);
   const campaignRepo = new CampaignRepository(db);
   const startedAt = Date.now();
+  const aiRequestTimes: number[] = [];
+
+  const allowAiRequest = (): boolean => {
+    const cutoff = Date.now() - 60_000;
+    while (aiRequestTimes.length > 0 && aiRequestTimes[0]! < cutoff) aiRequestTimes.shift();
+    if (aiRequestTimes.length >= 30) return false;
+    aiRequestTimes.push(Date.now());
+    return true;
+  };
 
   const app = new Hono();
 
@@ -83,6 +92,15 @@ export function createApp(options: AppOptions): Hono {
   );
 
   app.use("/api/*", async (c, next) => {
+    const origin = c.req.header("origin");
+    if (
+      origin &&
+      origin !== "null" &&
+      !origin.startsWith("file://") &&
+      !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)
+    ) {
+      return c.json({ error: "Forbidden origin", code: "forbidden_origin" }, 403);
+    }
     if (c.req.path === "/api/health") {
       await next();
       return;
@@ -133,9 +151,12 @@ export function createApp(options: AppOptions): Hono {
     const next = {
       ...current,
       ...(patch.ai ? { ai: { ...current.ai, ...patch.ai } } : {}),
+      ...(patch.audio ? { audio: { ...current.audio, ...patch.audio } } : {}),
       ...(patch.contentRating ? { contentRating: patch.contentRating } : {}),
       ...(patch.difficulty ? { difficulty: patch.difficulty } : {}),
       ...(patch.reduceMotion !== undefined ? { reduceMotion: patch.reduceMotion } : {}),
+      ...(patch.highContrast !== undefined ? { highContrast: patch.highContrast } : {}),
+      ...(patch.showTooltips !== undefined ? { showTooltips: patch.showTooltips } : {}),
       ...(patch.uiScale !== undefined ? { uiScale: patch.uiScale } : {}),
     };
 
@@ -161,6 +182,33 @@ export function createApp(options: AppOptions): Hono {
 
   app.delete("/api/campaign", (c) => {
     campaignRepo.clear();
+    return c.json({ ok: true });
+  });
+
+  app.get("/api/campaign/slots", (c) => {
+    return c.json({ slots: campaignRepo.listSlots() });
+  });
+
+  app.post("/api/campaign/slots/:slot", (c) => {
+    const slot = c.req.param("slot");
+    if (!/^[1-3]$/.test(slot)) return c.json({ error: "Invalid slot", code: "invalid_slot" }, 400);
+    const updatedAt = campaignRepo.saveSlot(slot);
+    if (!updatedAt) return c.json({ error: "No active campaign", code: "no_campaign" }, 404);
+    return c.json({ ok: true, updatedAt, slot });
+  });
+
+  app.post("/api/campaign/slots/:slot/load", (c) => {
+    const slot = c.req.param("slot");
+    if (!/^[1-3]$/.test(slot)) return c.json({ error: "Invalid slot", code: "invalid_slot" }, 400);
+    const loaded = campaignRepo.loadSlot(slot);
+    if (!loaded) return c.json({ error: "Slot is empty", code: "empty_slot" }, 404);
+    return c.json({ campaign: loaded.state, updatedAt: loaded.updatedAt });
+  });
+
+  app.delete("/api/campaign/slots/:slot", (c) => {
+    const slot = c.req.param("slot");
+    if (!/^[1-3]$/.test(slot)) return c.json({ error: "Invalid slot", code: "invalid_slot" }, 400);
+    campaignRepo.deleteSlot(slot);
     return c.json({ ok: true });
   });
 
@@ -190,6 +238,9 @@ export function createApp(options: AppOptions): Hono {
       return c.json({ error: "Invalid request", code: "invalid_request" }, 400);
     }
     const body = parsed.data;
+    if (!allowAiRequest()) {
+      return c.json({ error: "Too many AI requests; wait a minute.", code: "rate_limited" }, 429);
+    }
     const apiKey = keystore.get();
     if (!apiKey) {
       return c.json({ error: "OpenCode Go API key is not configured", code: "missing_key" }, 400);
@@ -314,6 +365,9 @@ export function createApp(options: AppOptions): Hono {
       return c.json({ error: "Invalid NPC turn request", code: "invalid_request" }, 400);
     }
     const body = parsed.data;
+    if (!allowAiRequest()) {
+      return c.json({ error: "Too many AI requests; wait a minute.", code: "rate_limited" }, 429);
+    }
     const apiKey = keystore.get();
     if (!apiKey) {
       return c.json({ error: "OpenCode Go API key is not configured", code: "missing_key" }, 400);

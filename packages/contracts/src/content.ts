@@ -119,3 +119,10 @@ export const EnemyDefinitionSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 export type EnemyDefinition = z.infer<typeof EnemyDefinitionSchema>;
+
+export const FactionDefinitionSchema = z.object({
+  id: ContentIdSchema,
+  name: z.string().min(1),
+  description: z.string().min(1),
+});
+export type FactionDefinition = z.infer<typeof FactionDefinitionSchema>;

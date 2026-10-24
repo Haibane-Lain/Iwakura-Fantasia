@@ -1,6 +1,12 @@
 import type { GameState, NpcTurn } from "@iwakura/contracts";
 import { describe, expect, it } from "vitest";
-import { applyNpcTurn, npcMemories } from "./ai.js";
+import {
+  applyNpcTurn,
+  npcConversationSummaries,
+  npcMemories,
+  recordConversationSummary,
+  retrieveNpcMemories,
+} from "./ai.js";
 import { acceptQuest, enterLocalMap, progressQuests } from "./local.js";
 import { createGameState } from "./world.js";
 import { generateWorld } from "./worldgen.js";
@@ -141,5 +147,24 @@ describe("npc intent validation", () => {
       }),
     );
     expect(result.rejected[0]).toContain("deferred");
+  });
+
+  it("retrieves relevant memories and stores conversation summaries", () => {
+    let state = enterLocalMap(makeState(), "core:redford")!.state;
+    state = applyNpcTurn(
+      state,
+      "core:hessa",
+      turn({
+        memoryWrites: [
+          { text: "The player asked about the mill wheel.", importance: 0.8 },
+          { text: "The player likes honey bread.", importance: 0.2 },
+        ],
+      }),
+    ).state;
+    expect(retrieveNpcMemories(state, "core:hessa", "what happened to the mill wheel?")[0]).toContain(
+      "mill wheel",
+    );
+    state = recordConversationSummary(state, "core:hessa", "Player asked about the mill; Hessa was wary.");
+    expect(npcConversationSummaries(state, "core:hessa")[0]).toContain("Hessa");
   });
 });

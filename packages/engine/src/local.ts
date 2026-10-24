@@ -38,6 +38,7 @@ import type {
 import { addItemToInventory } from "./character.js";
 import { axialIndex, offsetToAxial } from "./grid.js";
 import { distance, findPath, hexKey } from "./hex.js";
+import { adjustFaction, branchQuest, dismissCompanion, recruitCompanion, romanceGate } from "./social.js";
 import { advanceClock } from "./time.js";
 
 function pointToHex(point: LocalPoint): Hex {
@@ -602,7 +603,11 @@ export function questForNpc(state: GameState, npcId: string): QuestState | undef
     const quest = state.quests[questId];
     if (quest) return quest;
   }
-  return undefined;
+  return Object.values(state.quests).find(
+    (quest) =>
+      (quest.status === "active" || quest.status === "completed") &&
+      (quest.giverId === npcId || quest.flags.turnInNpcId === npcId),
+  );
 }
 
 export function questTemplateForNpc(npcId: string) {
@@ -668,6 +673,22 @@ export function applyDialogueAction(
     }
     case "open_shop": {
       return { state: ensureShop(state, action.shopId), shopId: action.shopId };
+    }
+    case "recruit_companion": {
+      const result = recruitCompanion(state, npcId);
+      return { state: result.state, message: result.message };
+    }
+    case "dismiss_companion": {
+      const result = dismissCompanion(state, npcId);
+      return { state: result.state, message: result.message };
+    }
+    case "branch_quest": {
+      const result = branchQuest(state, action.questId, action.branchId);
+      return { state: result.state, message: result.message };
+    }
+    case "romance": {
+      const result = romanceGate(state, npcId);
+      return { state: result.state, message: result.message };
     }
     case "adjust_disposition": {
       return {
@@ -795,14 +816,26 @@ export function claimQuest(state: GameState, questId: string): QuestResult {
   if (!questReady(quest)) return { state, message: "The task is not finished." };
   const template = getQuestTemplate(quest.templateId);
   const player = state.entities.player;
-  if (!template || !player) return { state, message: "The reward cannot be paid." };
+  if (!player) return { state, message: "The reward cannot be paid." };
+  const rewardItems = template
+    ? template.rewards.itemIds
+    : Array.isArray(quest.rewards.items)
+      ? (quest.rewards.items as Array<{ itemId: string; quantity?: number }>).filter(
+          (entry) => typeof entry?.itemId === "string",
+        )
+      : [];
+  const gold = template ? template.rewards.gold : Number(quest.rewards.gold ?? 0);
+  const turnInNpcId = template
+    ? template.turnInNpcId
+    : String(quest.flags.turnInNpcId ?? quest.giverId ?? "");
+  const title = template?.title ?? quest.title;
   let inventory = [...player.inventory];
-  for (const item of template.rewards.itemIds) {
-    inventory = addItemToInventory(inventory, item.itemId, item.quantity);
+  for (const item of rewardItems) {
+    inventory = addItemToInventory(inventory, item.itemId, item.quantity ?? 1);
   }
   let next: GameState = {
     ...state,
-    party: { ...state.party, gold: state.party.gold + template.rewards.gold },
+    party: { ...state.party, gold: state.party.gold + gold },
     entities: {
       ...state.entities,
       player: { ...player, inventory },
@@ -813,19 +846,24 @@ export function claimQuest(state: GameState, questId: string): QuestResult {
     },
     campaign: updated(state),
   };
-  next = adjustRelationship(next, template.turnInNpcId, {
-    axis: "trust",
-    delta: 8,
-    reason: `Completed ${template.title}`,
-  });
-  next = adjustRelationship(next, template.turnInNpcId, {
-    axis: "respect",
-    delta: 5,
-    reason: `Completed ${template.title}`,
-  });
+  if (turnInNpcId) {
+    next = adjustRelationship(next, turnInNpcId, {
+      axis: "trust",
+      delta: 8,
+      reason: `Completed ${title}`,
+    });
+    next = adjustRelationship(next, turnInNpcId, {
+      axis: "respect",
+      delta: 5,
+      reason: `Completed ${title}`,
+    });
+  }
+  if (typeof quest.flags.factionId === "string") {
+    next = adjustFaction(next, quest.flags.factionId, 5, `Completed ${title}`);
+  }
   return {
     state: next,
-    message: `Quest complete: ${template.title}. Received ${template.rewards.gold} gp.`,
+    message: `Quest complete: ${title}. Received ${gold} gp.`,
     questId,
   };
 }

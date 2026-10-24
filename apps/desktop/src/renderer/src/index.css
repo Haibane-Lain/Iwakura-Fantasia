@@ -339,3 +339,68 @@
 .text-balance {
   text-wrap: balance;
 }
+
+:root {
+  --ui-scale: 1;
+}
+
+html {
+  font-size: calc(16px * var(--ui-scale));
+}
+
+body {
+  font-size: 0.875rem;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms;
+  animation-iteration-count: 1;
+  transition-duration: 0.001ms;
+  scroll-behavior: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.001ms;
+    scroll-behavior: auto;
+  }
+}
+
+.high-contrast {
+  --color-line: #6b5a3d;
+  --color-line-soft: #4a3f2c;
+  --color-muted: #c7bba2;
+  --color-faint: #a79b83;
+}
+
+.high-contrast .panel {
+  border-color: #6b5a3d;
+}
+
+.high-contrast .btn {
+  border-color: #6b5a3d;
+}
+
+@keyframes battle-flash {
+  0% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.battle-flash {
+  animation: battle-flash 220ms ease-out both;
+}

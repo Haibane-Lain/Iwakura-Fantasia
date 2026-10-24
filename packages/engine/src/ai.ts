@@ -21,6 +21,48 @@ export function npcMemories(state: GameState, npcId: string): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 3);
+}
+
+/** Lexical memory retrieval for prompt context. */
+export function retrieveNpcMemories(state: GameState, npcId: string, query: string, limit = 5): string[] {
+  const memories = npcMemories(state, npcId);
+  const terms = words(query);
+  if (terms.length === 0) return memories.slice(-limit);
+  return memories
+    .map((memory) => {
+      const lower = memory.toLowerCase();
+      const score = terms.reduce((total, term) => total + (lower.includes(term) ? 1 : 0), 0);
+      return { memory, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((entry) => entry.memory);
+}
+
+export function recordConversationSummary(state: GameState, npcId: string, summary: string): GameState {
+  const key = `npc.summaries.${npcId}`;
+  const current = Array.isArray(state.flags[key])
+    ? state.flags[key].filter((entry): entry is string => typeof entry === "string")
+    : [];
+  return {
+    ...state,
+    flags: {
+      ...state.flags,
+      [key]: [...current, summary].slice(-8),
+    },
+  };
+}
+
+export function npcConversationSummaries(state: GameState, npcId: string): string[] {
+  const value = state.flags[`npc.summaries.${npcId}`];
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
 function remember(state: GameState, npcId: string, text: string): GameState {
   const existing = npcMemories(state, npcId);
   if (existing.includes(text)) return state;

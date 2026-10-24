@@ -12,10 +12,12 @@
     "dev": "pnpm --filter @iwakura/desktop dev",
     "build": "pnpm --filter @iwakura/desktop build",
     "package": "pnpm --filter @iwakura/desktop package",
+    "package:installer": "pnpm --filter @iwakura/desktop package:installer",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "pnpm --filter @iwakura/desktop build && playwright test",
+    "test:acceptance": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e",
     "lint": "biome check .",
     "format": "biome format --write ."
   },

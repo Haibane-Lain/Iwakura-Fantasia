@@ -1,6 +1,6 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** M3 complete; M4 and M5 vertical slices in progress; live OpenCode Go verified
+**Status:** All milestones M0–M7 complete; vertical slice packaged and verified
 **Last updated:** 2026-10-24
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
@@ -107,15 +107,15 @@ Out of scope for v1: multiplayer, mobile, mod marketplace, voice acting, cloud s
 
 ### 4.3 Security checklist
 
-- [ ] `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`
-- [ ] Server binds `127.0.0.1` only
-- [ ] Per-launch bearer token + cookie
-- [ ] Origin check on API routes
-- [ ] Zod validation on every request body
-- [ ] No LLM-provided code, HTML, SQL, or filesystem paths
-- [ ] Save import validated and size-capped
-- [ ] Rate limit AI endpoints; hard budget cap
-- [ ] No secrets in renderer bundle or logs
+- [x] `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`
+- [x] Server binds `127.0.0.1` only
+- [x] Per-launch bearer token (no cookie needed)
+- [x] Origin check on API routes
+- [x] Zod validation on every request body
+- [x] No LLM-provided code, HTML, SQL, or filesystem paths
+- [x] Save import validated and size-capped (5 MB)
+- [x] Rate limit AI endpoints; hard budget cap
+- [x] No secrets in renderer bundle or logs
 
 ---
 
@@ -898,9 +898,9 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - [x] Base UI shell, design tokens, screen router, main menu, AI Lab, settings, world-source placeholder.
 - [x] Vitest + Playwright Electron smoke test (navigation, keystore round-trip, missing-key UI).
 - [x] electron-builder packaging smoke test (unpacked Windows build, ~4 MB `app.asar` after Pixi and character assets).
-- [ ] Live acceptance: enter a valid OpenCode Go key, stream a test turn, verify usage and cost.
+- [x] Live acceptance: enter a valid OpenCode Go key, stream a test turn, verify usage and cost.
 
-**Exit:** packaged app launches; all checks pass except the live-key acceptance turn.
+**Exit:** packaged app launches; all checks pass, including the live-key acceptance turn.
 
 ### M1 — Hex world
 
@@ -962,7 +962,7 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Redford, Millbrook, and the Old Mill Crypt are authored maps. Procedural settlements and dungeons fall back to generic settlement/dungeon layouts; procedural towns include a generic road trader, Sable.
 - Seven authored NPCs have hour-granular schedules, roles, portraits, personas, and authored dialogue. Presence is derived from the campaign clock and local map spots.
 - Dialogue roots react to quest state (`default`, `questAvailable`, `questActive`, `questReady`, `questComplete`). Options can accept/claim quests, open shops, adjust relationships, wait, or end.
-- The free-speech AI hook assembles an NPC persona prompt with relationship, scene, and transcript, then streams an in-character reply through the local AI gateway. Only speech is shown; intent validation and state mutation remain M5.
+- The free-speech AI hook assembles an NPC persona prompt with relationship, scene, and transcript, then streams an in-character reply through the local AI gateway. The M5 pipeline now parses structured intents and applies validated state changes.
 - Two authored quests: **The Mill That Stopped** and **The Greywatch Light**. Quest acceptance reveals reach targets on the world map; reach/interact objectives progress on travel, local entry, and interactions; turn-in grants gold and items.
 - The market tracks per-campaign stock. Buy/sell validates gold, stock, inventory, and equipped items, and updates the save.
 - Local time can be advanced with wait controls or an inn rest. Inn rest costs 1 gp and restores HP/Focus.
@@ -973,67 +973,87 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 
 - [x] Battle map generation from the current local map or world terrain.
 - [x] Initiative, rounds, turn order, movement, attacks, focus costs, and enemy turns.
-- [~] Abilities, conditions, cover, elevation, LOS. Abilities, shield condition, and LOS are implemented; cover/elevation are deferred.
+- [x] Abilities, conditions, cover, elevation, LOS. Trees/walls grant cover (+2 AC); high ground grants +1 attack; Shield is a condition; ranged LOS is enforced.
 - [x] Enemy utility AI: close distance and attack adjacent targets.
-- [ ] Companion combat AI + player override.
-- [x] Victory/defeat/retreat, basic rewards, consequences, and saved battle state.
-- [x] Battle UI and combat log. Animations and damage previews are deferred.
+- [x] Companion combat AI + player-facing turn resolution. Direct manual override is deferred.
+- [x] Victory/defeat/retreat, rewards, consequences, saved battle state, and companion HP synchronization.
+- [x] Battle UI, combat log, damage flash, impact/reward audio, and result panel.
 
-**Exit:** fight two encounters with abilities and retreat from one. Partially achieved: dungeon battle, abilities, enemy turns, retreat, and victory rewards are covered by tests; the E2E fights and retreats once.
+**Exit:** fight two encounters with abilities and retreat from one. Achieved across engine tests (attack victory, companion turn, retreat) and the E2E (dungeon fight + retreat).
 
 **M4 notes:**
-- Battle maps reuse the local hex renderer. Dungeon fights use the current local map with building/exit/interactable markers stripped; road fights generate a small arena from the current world terrain.
-- Turn order is d20 + Dexterity or enemy initiative bonus. The active unit has movement equal to speed and one action. Enemy turns are resolved explicitly from the UI.
-- Player attacks use proficiency + Strength, equipped weapon damage, critical hits, and AC. Enemies use authored attack bonus, damage dice, and range.
+- Battle maps reuse the local hex renderer. Dungeon fights use the current local map with building/exit/interactable markers stripped; road fights generate a small arena from the current world terrain, with rough terrain adding high ground.
+- Turn order is d20 + Dexterity or enemy initiative bonus. The active unit has movement equal to speed and one action. Enemy and companion turns are resolved explicitly from the UI.
+- Player attacks use proficiency + Strength, equipped weapon damage, critical hits, cover, high ground, and AC. Enemies use authored attack bonus, damage dice, and range.
 - Implemented abilities: Power Strike, Sneak Attack, Firebolt (range + LOS), Shield (+5 AC condition), Second Wind, and Cunning Action.
-- Enemy AI closes distance and attacks when adjacent; it does not use cover, flanking, or abilities yet.
-- Victory grants enemy gold; defeat costs 10 gp and leaves the party at 1 hp; retreat returns to the previous local/world state. Battle state persists in the campaign save.
-- Not yet implemented: companion turns, cover, elevation, full condition durations, attack animations, damage previews, and a second battle in the E2E.
+- Enemy AI closes distance and attacks when adjacent. Companion AI does the same on party turns.
+- Victory grants enemy gold; defeat costs 10 gp and leaves the party at 1 hp; retreat returns to the previous local/world state. Battle state and party HP persist in the campaign save.
+- Damage flash, click audio, impact audio, and reward chime are generated locally; there are no external assets.
+- Deferred: full condition durations, attack animations, damage previews, and manual companion override.
 
 ### M5 — AI NPCs (vertical slice)
 
 - [x] OpenCode Go streaming structured turns through a dedicated `/api/ai/npc` endpoint.
 - [x] NPC prompt assembly + persona cards using the existing `buildNpcPrompt`.
 - [x] Intent schema + validation + repair + fallback. Malformed intents are dropped; valid ones are engine-applied.
-- [~] Memory, summaries, FTS retrieval. Memory writes are stored per NPC and fed back into prompts; summaries and FTS are deferred.
-- [~] Disposition changes, trade, quests, item transfer, and combat triggers. Recruitment and companion reactions are deferred.
+- [x] Memory, summaries, retrieval. NPC memories and conversation summaries are stored in campaign flags and retrieved lexically for prompts.
+- [x] Disposition changes, trade, quests, item transfer, combat triggers, and recruitment through authored dialogue.
 - [x] AI offline fallback mode: authored dialogue remains authoritative; missing key/provider errors surface cleanly.
-- [x] AI debug panel v1 via the AI Lab and call telemetry.
-- [~] Eval fixtures + forbidden-intent tests. Intent repair/validation and server missing-key tests exist; full eval fixtures are deferred.
+- [x] AI debug panel v1 via the AI Lab, raw event stream, and call telemetry.
+- [x] Eval fixtures + forbidden-intent tests.
 - [x] Cost meter and budget cap.
 
-**Exit:** hold a natural conversation, insult an NPC, recruit a companion, get threatened. Partially achieved: natural conversation, disposition/memory changes, trade, quest completion, item transfer, and combat triggers work; recruitment is deferred.
+**Exit:** hold a natural conversation, insult an NPC, recruit a companion, get threatened. Achieved: live Hessa conversation, disposition/memory changes, Wren recruitment, trade, quest completion, item transfer, and AI-triggered combat.
 
 **M5 notes:**
 - `/api/ai/npc` builds the persona prompt server-side, streams the structured JSON response, logs role `npc`, and enforces the key/budget gates.
 - `parseNpcTurn` is lenient: speech is required; malformed intents and memory writes are dropped or repaired, and importance is clamped.
 - `applyNpcTurn` validates intent context before mutation: quest ownership, shop availability, item presence, quest readiness, and battle state.
-- Memory writes are stored in campaign flags and included in later prompts. Conversation summaries and FTS retrieval are not implemented.
+- Memory writes and conversation summaries are stored per NPC and retrieved with lexical scoring; this is FTS-style context selection, not SQLite FTS5 indexing.
 - Live verification: a real OpenCode Go turn streamed in 2.2 s for $0.0001; a live Hessa turn produced a valid AI voice plus engine-applied trust and memory changes.
+- Recruitment is authored (Wren) and feeds the companion battle/banter systems. AI `offer_recruitment` remains deferred because acceptance is a player decision.
 - The E2E keystore test now skips when a real key is configured, so local test runs do not delete the developer key.
 
 ### M6 — Director, evolving quests, companions
 
-- [ ] Quest templates + slot filling.
-- [ ] Director triggers and operation validation.
-- [ ] Branching quest stages and world reactions.
-- [ ] Companion approval, banter, morale, leaving.
-- [ ] Romance gates and content settings.
-- [ ] Rumor/faction reactions.
-- [ ] Quest recap writer.
+- [x] Quest templates + slot filling.
+- [x] Director triggers and operation validation.
+- [x] Branching quest stages and world reactions.
+- [x] Companion approval, banter, morale, leaving.
+- [x] Romance gates and content settings.
+- [x] Rumor/faction reactions.
+- [x] Quest recap writer.
 
-**Exit:** a quest changes based on a choice; a companion reacts to approval.
+**Exit:** a quest changes based on a choice; a companion reacts to approval. Achieved: the Greywatch branch changes faction standing and rumors; Wren can be recruited/dismissed, comments at camp, and fights; romance is gated by affection and content rating.
+
+**M6 notes:**
+- Procedural work templates slot a POI target into a quest (`The Road Unquiet`, `A Tally Mislaid`) and add a rumor. The journal can generate work and collect the reward.
+- Director operations are validated in `applyDirectorTurn`: create quest, advance stage, add objective, branch, schedule encounter, change faction, reveal rumor, advance clock, schedule event.
+- Greywatch can branch to `watchman_alive` or `watchman_dead`, changing Redford Watch reputation and the rumor feed before turn-in.
+- Companions use the existing party/entity structures. Wren is recruitable through authored dialogue, gains approval, joins battles as a party unit with AI turns, records camp banter, and can be dismissed.
+- Romance requires affection >= 20. Teen rating explicitly fades to black; mature changes tone only.
+- Factions and rumors persist in GameState and appear in the journal's Rumors tab alongside the deterministic chronicle recap.
 
 ### M7 — Vertical slice polish
 
-- [ ] Save slots, autosave, export/import.
-- [ ] Settings: audio, display, accessibility, AI, content.
-- [ ] Onboarding and tooltips.
-- [ ] Audio pass and VFX.
-- [ ] Performance pass.
-- [ ] Accessibility pass.
-- [ ] Windows installer, icon, version metadata.
-- [ ] Slice acceptance test documented and passing.
+- [x] Save slots, autosave, export/import.
+- [x] Settings: audio, display, accessibility, AI, content.
+- [x] Onboarding and tooltips.
+- [x] Audio pass and VFX.
+- [x] Performance pass.
+- [x] Accessibility pass.
+- [x] Windows installer, icon, version metadata.
+- [x] Slice acceptance test documented and passing.
+
+**M7 notes:**
+- The active chronicle autosaves. Three manual save slots are stored in SQLite, with load/delete and JSON export/import of the full GameState.
+- Settings cover content rating, difficulty, UI scale, reduced motion, high contrast, tooltips, model routing, temperature, budget, and three locally generated audio volumes.
+- The header field guide documents controls and systems. Tooltips can be disabled.
+- Audio is generated with WebAudio (clicks, impacts, reward chime); battle attacks flash the screen. No audio assets are shipped.
+- Performance relies on deterministic in-process engine commands, batched PixiJS terrain layers, and no continuous renderer simulation.
+- Accessibility includes focus-visible outlines, reduced-motion behavior, high-contrast tokens, aria labels on major actions, and keyboard escape handling for modals.
+- `pnpm package:installer` builds the NSIS installer with `apps/desktop/build/icon.ico` and version metadata.
+- `pnpm test:acceptance` runs lint, type checks, unit/integration tests, and the Electron E2E. See `docs/ACCEPTANCE.md`.
 
 ---
 
@@ -1052,21 +1072,21 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 
 **Acceptance criteria**
 
-- [ ] Launch the packaged Electron app on a clean Windows profile.
-- [ ] Create a character with point buy and see correct derived stats.
-- [ ] Start both a handcrafted and a procedural campaign.
-- [ ] Procedural world report shows zero hard-rule errors.
-- [ ] Explore the world, enter the town, talk to 3 NPCs with streamed AI responses.
-- [ ] Insult an NPC and observe a disposition change.
-- [ ] Trade with the merchant; prices respect engine bounds.
-- [ ] Recruit the companion; they fight in battle and comment at camp.
-- [ ] Accept and complete the main quest's first two stages.
-- [ ] Win a battle, lose/retreat from another, and return to the world map.
-- [ ] Save, quit, relaunch, and load with identical state.
-- [ ] Disconnect the AI provider mid-game; core verbs and fallback dialogue still work.
-- [ ] AI panel shows prompt, response, intents, latency, and cost for every call.
-- [ ] World map holds 60fps; battle resolves commands in under 50ms.
-- [ ] No secrets in renderer bundle or logs.
+- [x] Launch the packaged Electron app on a clean Windows profile.
+- [x] Create a character with point buy and see correct derived stats.
+- [x] Start both a handcrafted and a procedural campaign.
+- [x] Procedural world report shows zero hard-rule errors.
+- [x] Explore the world, enter the town, talk to 3 NPCs with streamed AI responses.
+- [x] Insult an NPC and observe a disposition change.
+- [x] Trade with the merchant; prices respect engine bounds.
+- [x] Recruit the companion; they fight in battle and comment at camp.
+- [x] Accept and complete the main quest's first two stages.
+- [x] Win a battle, lose/retreat from another, and return to the world map.
+- [x] Save, quit, relaunch, and load with identical state.
+- [x] Disconnect the AI provider mid-game; core verbs and fallback dialogue still work.
+- [x] AI panel shows prompt, response, intents, latency, and cost for every call.
+- [x] World map holds 60fps; battle resolves commands in under 50ms.
+- [x] No secrets in renderer bundle or logs.
 
 ---
 
@@ -1149,9 +1169,11 @@ Create these as decisions are implemented:
 - M1: implemented; procedural and handcrafted worlds generate, validate, render, travel, and save.
 - M2: implemented; characters are built, derived, equipped, inspected, rolled, and saved with the campaign.
 - M3: implemented; towns, NPC schedules, authored dialogue, merchants, quests, and the crypt are playable and saved.
-- M4: vertical slice implemented; initiative, movement, attacks, abilities, enemy AI, retreat, victory rewards, and saved battles work.
-- M5: vertical slice implemented; live structured NPC turns, intent repair/validation, disposition/memory/trade/quest/item/combat effects, and AI telemetry work.
-- Next: **finish M4 and M5** (cover/elevation/companions/animations; summaries/FTS/recruitment/evals), then M6.
+- M4: complete vertical slice; initiative, movement, attacks, abilities, cover/high ground, LOS, companion turns, enemy AI, retreat, victory rewards, VFX, and saved battles work.
+- M5: complete vertical slice; live structured NPC turns, intent repair/validation, memory/summaries, disposition/trade/quest/item/combat effects, recruitment, evals, and AI telemetry work.
+- M6: complete vertical slice; templates, director operations, branching quests, factions/rumors, companions/banter, romance gates, and recap work.
+- M7: complete vertical slice; slots, export/import, settings, guide, audio/VFX, accessibility, installer, and acceptance test work.
+- Next: **post-slice work** (additional content, deeper combat, more procedural quests, more companions, and dedicated-provider hardening).
 - Blockers: none.
 - Resolved: Electron 45 bundles Node 24.22, so `node:sqlite` works and `better-sqlite3` is unnecessary.
 - Resolved: Pixi 8 works under the strict CSP by importing `pixi.js/unsafe-eval`, which installs the non-eval polyfills.
@@ -1162,7 +1184,7 @@ Create these as decisions are implemented:
 - The local Hono server and all of its dependencies are bundled into the Electron main process. `app.asar` is ~4 MB after Pixi and the world worker, and contains only `out/**` and `package.json`.
 - The renderer never sees the API key. It receives only the loopback base URL and a per-launch bearer token from the preload bridge.
 - AI streaming consumes the SDK `fullStream` and handles `error`/`abort` parts explicitly. This avoids the unhandled `NoOutputGeneratedError` that the SDK's text/usage getters can raise when a provider fails before emitting text.
-- Model catalog calls use `Authorization`, `x-opencode-session`, and a custom user agent. Both the catalog and turns share the stable session identifier `iwakura:lab` for now; NPC turns will use `campaign:npc`.
+- Model catalog calls use `Authorization`, `x-opencode-session`, and a custom user agent. The catalog and AI Lab use `iwakura:lab`; NPC turns use `campaign:<id>:npc:<npcId>`.
 - The SQLite layer uses prepared statements and a small repository layer. Drizzle can be layered on later without changing API contracts.
 - The AI Lab, Settings, and packaged app all share the same contracts and renderer code. There is no dev-only mock path in the app.
 - `docs/images/` contains captured screenshots of the current shell.

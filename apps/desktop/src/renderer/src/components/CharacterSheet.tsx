@@ -3,6 +3,9 @@ import type { CharacterAppearance, Entity, GameState } from "@iwakura/contracts"
 import {
   abilityModifier,
   allSkillModifiers,
+  companionApproval,
+  companionBanter,
+  dismissCompanion,
   type EquipmentSlot,
   equipItem,
   formatModifier,
@@ -127,6 +130,10 @@ export function CharacterSheet({ onClose }: { onClose: () => void }) {
   const appearance = appearanceFor(entity);
   const initiative = abilityModifier(entity.attributes.dex);
   const skills = allSkillModifiers(entity);
+  const companions = campaign.party.memberIds
+    .filter((id) => id !== "player")
+    .map((id) => campaign.entities[id])
+    .filter((entry): entry is Entity => Boolean(entry));
 
   const update = async (state: GameState) => {
     await saveCampaign(state);
@@ -148,6 +155,11 @@ export function CharacterSheet({ onClose }: { onClose: () => void }) {
       total: result.total,
     });
     void update(state);
+  };
+
+  const dismiss = (npcId: string) => {
+    const result = dismissCompanion(campaign, npcId);
+    if (result.state !== campaign) void update(result.state);
   };
 
   return (
@@ -273,6 +285,50 @@ export function CharacterSheet({ onClose }: { onClose: () => void }) {
                         {trait.name}
                       </span>
                     ))}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="kicker">Companions</div>
+                  <div className="mt-2 space-y-2">
+                    {companions.length === 0 ? (
+                      <p className="text-[10px] text-faint">No one travels with you yet.</p>
+                    ) : (
+                      companions.map((companion) => {
+                        const approval = companionApproval(campaign, companion.id);
+                        const banter = companionBanter(campaign, companion.id);
+                        return (
+                          <div key={companion.id} className="border border-line-soft bg-black/10 px-3 py-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Portrait
+                                  appearance={appearanceFor(companion)}
+                                  className="size-9 rounded-sm border border-line"
+                                />
+                                <div>
+                                  <div className="font-display text-sm text-parchment">{companion.name}</div>
+                                  <div className="text-[9px] text-faint">
+                                    approval {approval} · {companion.hp.current}/{companion.hp.max} hp
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn px-2! py-0.5! text-[9px]!"
+                                onClick={() => dismiss(companion.id)}
+                              >
+                                Part ways
+                              </button>
+                            </div>
+                            {banter.length > 0 ? (
+                              <p className="mt-1 text-[10px] italic leading-4 text-muted">
+                                “{banter[banter.length - 1]}”
+                              </p>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>

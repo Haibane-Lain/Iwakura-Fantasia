@@ -3,6 +3,7 @@ import type {
   LocalMapDefinition,
   NpcDefinition,
   QuestTemplate,
+  QuestWorkTemplate,
   ShopDefinition,
 } from "@iwakura/contracts";
 
@@ -96,6 +97,13 @@ export const LOCAL_TILES: LocalTileDefinition[] = [
     name: "Bridge",
     description: "Planks over running water.",
     color: 0x6e5d40,
+    walkable: true,
+  },
+  {
+    id: "high_ground",
+    name: "High ground",
+    description: "A raised shelf of rock with a clear view.",
+    color: 0x8a7d5e,
     walkable: true,
   },
 ];
@@ -771,7 +779,7 @@ export const NPCS: NpcDefinition[] = [
       knowledge: ["The crypt door was opened by men from the south", "The mill race runs under the hill"],
       sampleLines: ["The trees heard it before we did."],
       archetype: "outlaw",
-      recruitable: false,
+      recruitable: true,
     },
   },
   {
@@ -975,11 +983,48 @@ export const DIALOGUES: DialogueDefinition[] = [
         text: 'Maud listens without interrupting. When you finish, she sets a coin purse on the wall. "That\'s for the watchman. This is for you."',
         options: [
           {
+            id: "alive",
+            text: "He's alive. Shaken, but alive.",
+            next: "alive",
+            action: {
+              type: "branch_quest",
+              questId: "core:greywatch_watch",
+              branchId: "watchman_alive",
+            },
+          },
+          {
+            id: "dead",
+            text: "He didn't make it. The beacon was bait.",
+            next: "dead",
+            action: {
+              type: "branch_quest",
+              questId: "core:greywatch_watch",
+              branchId: "watchman_dead",
+            },
+          },
+          { id: "back", text: "Keep it. I'm not done.", action: { type: "end" } },
+        ],
+      },
+      alive: {
+        id: "alive",
+        text: '"Alive." Maud says the word once, quietly, as if testing whether it holds. "Then the Watch owes you more than coin. I\'ll send a cart for him."',
+        options: [
+          {
             id: "claim",
             text: "Take the payment.",
             action: { type: "claim_quest", questId: "core:greywatch_watch" },
           },
-          { id: "back", text: "Keep it. I'm not done.", action: { type: "end" } },
+        ],
+      },
+      dead: {
+        id: "dead",
+        text: 'Maud does not look away. "Then I\'ll write his name myself. The beacon was bait, and we walked into it." She sets the purse down. "Take it. And stay off the southeast road until I say otherwise."',
+        options: [
+          {
+            id: "claim",
+            text: "Take the payment.",
+            action: { type: "claim_quest", questId: "core:greywatch_watch" },
+          },
         ],
       },
       done: {
@@ -1103,6 +1148,16 @@ export const DIALOGUES: DialogueDefinition[] = [
         options: [
           { id: "crypt", text: "What do you know about the crypt?", next: "crypt" },
           { id: "woods", text: "What are you listening for?", next: "woods" },
+          {
+            id: "recruit",
+            text: "The road is safer with two. Travel with me.",
+            action: { type: "recruit_companion" },
+          },
+          {
+            id: "romance",
+            text: "Stay with me at camp tonight.",
+            action: { type: "romance" },
+          },
           { id: "bye", text: "I'll leave you to it.", action: { type: "end" } },
         ],
       },
@@ -1241,4 +1296,31 @@ export const QUESTS: QuestTemplate[] = [
 
 export function getQuestTemplate(id: string): QuestTemplate | undefined {
   return QUESTS.find((quest) => quest.id === id);
+}
+
+export const QUEST_WORK_TEMPLATES: QuestWorkTemplate[] = [
+  {
+    id: "core:road_unquiet",
+    title: "The Road Unquiet",
+    summary:
+      "Travellers have gone quiet on the road near {place}. The Watch wants someone to look into it before the next caravan.",
+    objectiveKind: "reach",
+    targetKinds: ["ruin", "dungeon", "camp"],
+    rewardGold: 25,
+    factionId: "core:redford_watch",
+  },
+  {
+    id: "core:missing_tally",
+    title: "A Tally Mislaid",
+    summary:
+      "The Millers' Compact lost a tally book near {place}. Recover it before the next accounting and they will remember the favor.",
+    objectiveKind: "reach",
+    targetKinds: ["ruin", "shrine", "dungeon"],
+    rewardGold: 20,
+    factionId: "core:millers_compact",
+  },
+];
+
+export function getQuestWorkTemplate(id: string): QuestWorkTemplate | undefined {
+  return QUEST_WORK_TEMPLATES.find((template) => template.id === id);
 }

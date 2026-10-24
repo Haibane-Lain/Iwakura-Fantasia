@@ -2,6 +2,7 @@ import { getAbility } from "@iwakura/content";
 import type { Hex } from "@iwakura/contracts";
 import {
   battleAttack,
+  battleCompanionTurn,
   battleEnemyTurn,
   battleMove,
   battleUnitAt,
@@ -22,7 +23,8 @@ import {
   Sparkles,
   Swords,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { playImpact, playReward } from "../audio";
 import { LocalCanvas } from "../components/LocalCanvas";
 import { cn, Panel, SectionLabel, StatusDot } from "../components/ui";
 import { useAppStore } from "../state/useAppStore";
@@ -31,7 +33,22 @@ export function BattleScreen() {
   const campaign = useAppStore((state) => state.campaign);
   const saveCampaign = useAppStore((state) => state.saveCampaign);
   const setScreen = useAppStore((state) => state.setScreen);
+  const settings = useAppStore((state) => state.settings);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
+
+  useEffect(() => {
+    if (campaign?.battle?.status === "victory" && settings) {
+      playReward(settings.settings.audio.masterVolume, settings.settings.audio.sfxVolume);
+    }
+  }, [campaign?.battle?.status, settings]);
+
+  const impact = () => {
+    if (!settings) return;
+    playImpact(settings.settings.audio.masterVolume, settings.settings.audio.sfxVolume);
+    setFlash(true);
+    window.setTimeout(() => setFlash(false), 240);
+  };
 
   if (!campaign?.battle) return null;
   const battle = campaign.battle;
@@ -63,7 +80,10 @@ export function BattleScreen() {
   const attack = () => {
     if (!selected || !playerTurn) return;
     const next = battleAttack(campaign, selected.id);
-    if (next) void persist(next);
+    if (next) {
+      impact();
+      void persist(next);
+    }
   };
 
   const castAbility = (abilityId: string) => {
@@ -72,7 +92,10 @@ export function BattleScreen() {
     if (!ability) return;
     const target = ability.targeting === "self" ? undefined : selected?.id;
     const next = battleUseAbility(campaign, abilityId, target);
-    if (next) void persist(next);
+    if (next) {
+      impact();
+      void persist(next);
+    }
   };
 
   const finish = () => {
@@ -85,13 +108,24 @@ export function BattleScreen() {
     if (next) void persist(next);
   };
 
-  const markers = enemies.map((unit) => ({
-    id: unit.id,
-    name: unit.name,
-    hex: unit.position,
-    palette: unit.palette ?? "ember",
-    activity: `${unit.hp}/${unit.maxHp} hp`,
-  }));
+  const markers = [
+    ...enemies.map((unit) => ({
+      id: unit.id,
+      name: unit.name,
+      hex: unit.position,
+      palette: unit.palette ?? "ember",
+      activity: `${unit.hp}/${unit.maxHp} hp`,
+    })),
+    ...battle.units
+      .filter((unit) => unit.kind === "companion" && !unit.defeated)
+      .map((unit) => ({
+        id: unit.id,
+        name: unit.name,
+        hex: unit.position,
+        palette: unit.palette ?? "moss",
+        activity: `${unit.hp}/${unit.maxHp} hp`,
+      })),
+  ];
 
   return (
     <div className="relative h-full overflow-hidden">
@@ -110,6 +144,9 @@ export function BattleScreen() {
         />
       </div>
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,7,6,0.6),transparent_20%,transparent_70%,rgba(8,7,6,0.68))]" />
+      <div
+        className={cn("pointer-events-none absolute inset-0 bg-blood/20 opacity-0", flash && "battle-flash")}
+      />
 
       <div className="pointer-events-none absolute inset-x-4 top-4 flex items-start justify-between gap-4">
         <Panel className="pointer-events-auto flex items-center gap-3 px-3 py-2">
@@ -162,7 +199,8 @@ export function BattleScreen() {
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <Footprints className="size-3.5 text-gold/60" />
             <span>
-              Click a reachable hex to move · click an enemy to target · {movementLeft} movement left
+              Click a reachable hex to move · click an enemy to target · {movementLeft} movement left · trees
+              and walls grant cover (+2 AC) · high ground grants +1 attack
             </span>
           </div>
         </Panel>
@@ -226,7 +264,25 @@ export function BattleScreen() {
               </div>
             </Panel>
 
-            {active?.team === "enemy" ? (
+            {active?.kind === "companion" ? (
+              <Panel className="border-moss/35 p-4">
+                <SectionLabel>Companion turn</SectionLabel>
+                <p className="mt-1 text-[11px] leading-5 text-muted">
+                  {active.name} is acting on their own. Resolve the turn to continue.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary mt-3 w-full"
+                  onClick={() => {
+                    const next = battleCompanionTurn(campaign);
+                    if (next) void persist(next);
+                  }}
+                >
+                  <Swords className="size-3.5" />
+                  Resolve {active.name}
+                </button>
+              </Panel>
+            ) : active?.team === "enemy" ? (
               <Panel className="border-gold/30 p-4">
                 <SectionLabel>Enemy turn</SectionLabel>
                 <p className="mt-1 text-[11px] leading-5 text-muted">

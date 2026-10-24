@@ -30,6 +30,7 @@ interface AppStore {
   campaignSaveState: CampaignSaveState;
   pendingWorld: WorldGenResult | null;
   pendingWorldParams: WorldGenParams | null;
+  helpOpen: boolean;
   loading: boolean;
   bootError: string | null;
   setScreen: (screen: Screen) => void;
@@ -43,6 +44,7 @@ interface AppStore {
   clearCampaign: () => Promise<void>;
   setPendingWorld: (result: WorldGenResult, params: WorldGenParams) => void;
   clearPendingWorld: () => void;
+  setHelpOpen: (open: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -58,6 +60,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   campaignSaveState: "idle",
   pendingWorld: null,
   pendingWorldParams: null,
+  helpOpen: false,
   loading: true,
   bootError: null,
 
@@ -165,4 +168,5 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setPendingWorld: (result, params) => set({ pendingWorld: result, pendingWorldParams: params }),
 
   clearPendingWorld: () => set({ pendingWorld: null, pendingWorldParams: null }),
+  setHelpOpen: (open) => set({ helpOpen: open }),
 }));

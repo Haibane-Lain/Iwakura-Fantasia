@@ -12,6 +12,7 @@ import { axialIndex, hexesInWorldRadius } from "./grid.js";
 import { distance, findPath, hexKey, spiral } from "./hex.js";
 import { createNpcEntities, progressQuests } from "./local.js";
 import { createRng } from "./rng.js";
+import { initialFactions } from "./social.js";
 import { rngFromGameState } from "./state-rng.js";
 import { advanceClock } from "./time.js";
 
@@ -121,7 +122,8 @@ export function createGameState(options: CreateGameStateOptions): GameState {
     },
     entities: { ...createNpcEntities(), [player.id]: player },
     quests: {},
-    factions: {},
+    factions: initialFactions(),
+    rumors: [],
     relationships: {},
     flags: {},
     shops: {},

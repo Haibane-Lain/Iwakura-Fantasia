@@ -2,6 +2,7 @@ import type { GameState } from "@iwakura/contracts";
 import { describe, expect, it } from "vitest";
 import {
   battleAttack,
+  battleCompanionTurn,
   battleEnemiesForEncounter,
   battleEnemyTurn,
   battleMove,
@@ -12,6 +13,7 @@ import {
   startBattle,
 } from "./battle.js";
 import { enterLocalMap } from "./local.js";
+import { recruitCompanion } from "./social.js";
 import { createGameState } from "./world.js";
 import { generateWorld } from "./worldgen.js";
 
@@ -167,6 +169,26 @@ describe("battle engine", () => {
     const finished = finishBattle(retreated!);
     expect(finished?.battle).toBeUndefined();
     expect(finished?.local).toBeTruthy();
+  });
+
+  it("adds companions to battle and resolves their turns", () => {
+    const recruited = recruitCompanion(cryptState(), "core:wren").state;
+    let state = startBattle(recruited, { enemyIds: ["core:crypt_shade"] })!;
+    const companion = state.battle!.units.find((unit) => unit.kind === "companion");
+    expect(companion).toBeDefined();
+    state = {
+      ...state,
+      battle: {
+        ...state.battle!,
+        activeUnitId: companion!.id,
+        units: state.battle!.units.map((unit) =>
+          unit.id === companion!.id ? { ...unit, actionUsed: false, moved: 0 } : unit,
+        ),
+      },
+    };
+    const next = battleCompanionTurn(state);
+    expect(next).not.toBeNull();
+    expect(next!.battle!.log.some((line) => line.includes(companion!.name))).toBe(true);
   });
 
   it("maps encounter ids to enemy groups", () => {
