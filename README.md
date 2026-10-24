@@ -75,6 +75,8 @@ pnpm install
 pnpm dev
 ```
 
+Or double-click **`run.bat`** to launch the packaged app. If the packaged build is missing, the script builds from source first. Use **`run.bat --dev`** for the Vite/Electron development loop.
+
 Then:
 
 1. Open **New Campaign**.
