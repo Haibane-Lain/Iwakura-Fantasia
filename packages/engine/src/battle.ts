@@ -163,7 +163,10 @@ export interface StartBattleOptions {
 
 export function startBattle(state: GameState, options: StartBattleOptions): GameState | null {
   if (state.battle || options.enemyIds.length === 0) return null;
-  const baseMap = state.travel?.map ?? state.local?.map ?? arenaMap(state);
+  // A local map is the most specific battlefield. Travel state can still be
+  // present when a dungeon encounter starts after fast travel, so check the
+  // local map first instead of silently fighting on the wilderness field.
+  const baseMap = state.local?.map ?? state.travel?.map ?? arenaMap(state);
   const map: LocalMap =
     state.travel || state.local
       ? {
@@ -177,7 +180,7 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
   const player = state.entities.player;
   if (!player) return null;
   const rng = rngFromGameState(state);
-  const playerPos = state.travel?.position ?? state.local?.position ?? offsetToAxial({ col: 2, row: 4 });
+  const playerPos = state.local?.position ?? state.travel?.position ?? offsetToAxial({ col: 2, row: 4 });
   const playerUnit: BattleUnit = {
     id: "battle:player",
     entityId: player.id,

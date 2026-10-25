@@ -42,6 +42,7 @@ export function TravelScreen() {
   const setCampaign = useAppStore((state) => state.setCampaign);
   const setScreen = useAppStore((state) => state.setScreen);
   const setWorldMode = useAppStore((state) => state.setWorldMode);
+  const settings = useAppStore((state) => state.settings);
 
   const latest = useRef(campaign);
   latest.current = campaign;
@@ -206,6 +207,8 @@ export function TravelScreen() {
           companions={companions}
           enemies={travel.enemies}
           paused={sheetOpen || questOpen}
+          hour={campaign.clock.hour}
+          reduceMotion={settings?.settings.reduceMotion ?? false}
           onAnchor={handleAnchor}
           onHover={setHoverHex}
           onFacing={handleFacing}

@@ -1,6 +1,6 @@
 # Vertical Slice Acceptance
 
-Status: **passing locally on Windows** (2026-10-24).
+Status: **passing locally on Windows** (2026-10-25).
 
 Run:
 
@@ -29,13 +29,13 @@ This runs lint, type checks, Vitest, the Electron E2E flow, and leaves the devel
 | No secrets in renderer/logs | Keystore server-only; CSP and bearer token; key never sent to renderer |
 | Installer and icon | `pnpm package:installer`; `apps/desktop/build/icon.ico` |
 | Travel Map | Each world hex generates a deterministic 40×28 field with reachable edge gates, settlement gates, and visible threats |
-| WASD and crossings | Smooth movement in Electron; walking through a road edge changes world hex; gates auto-load towns |
-| Seamless travel combat | Visible groups auto-aggro and use the current field map for initiative/cover/companion turns |
+| WASD and crossings | Smooth screen-relative movement in Electron; walking through a road edge changes world hex; gates auto-load towns |
+| Seamless travel combat | Visible groups auto-aggro and use the current isometric field map for initiative/cover/companion turns |
 | Atlas fast travel | Fast travel loads the destination field outside its gate and preserves time/fog/quest progress |
 | Travel save/load | Current field map, enemies, cleared groups, and anchor position persist in the campaign save |
 
 Notes:
 
-- FPS is bounded by batched PixiJS terrain layers; no continuous simulation runs in the renderer.
+- FPS is bounded by batched textured hex meshes and a fixed isometric field renderer; no continuous simulation runs in the renderer.
 - The AI E2E success path requires a live key and is therefore not part of the default CI run. The live path was verified manually.
 - Save slots are manual snapshots; the active chronicle autosaves.

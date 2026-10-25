@@ -4,6 +4,7 @@ import {
   axialIndex,
   axialToOffset,
   cornerOffset,
+  hashString,
   hexToPixel,
   offsetToAxial,
   pathBetween,
@@ -18,9 +19,37 @@ import {
   Rectangle,
   Text,
 } from "pixi.js";
+import { addFlatHexTop, MeshBuilder, meshFrom } from "../render/iso/mesh";
+import { tileTexture } from "../render/iso/textures";
 
 const HEX_SIZE = 24;
 const LABEL_ZOOM = 0.42;
+
+function terrainTextureId(terrain: string): string {
+  switch (terrain) {
+    case "ocean":
+    case "coast":
+    case "lake":
+      return "water";
+    case "beach":
+    case "desert":
+      return "sand";
+    case "forest":
+      return "tree";
+    case "hills":
+      return "high_ground";
+    case "mountains":
+      return "rock";
+    case "swamp":
+      return "marsh";
+    case "tundra":
+      return "field";
+    case "snow":
+      return "snow";
+    default:
+      return "grass";
+  }
+}
 
 export interface WorldRendererCallbacks {
   onTravel: (hex: Hex) => void;
@@ -112,26 +141,48 @@ export class WorldRenderer {
   }
 
   private buildTerrain(): void {
-    const groups = new Map<string, Graphics>();
-    for (const terrain of new Set(this.world.terrain)) {
-      const graphics = new Graphics();
-      groups.set(terrain, graphics);
-      this.camera.addChildAt(graphics, this.camera.children.length);
-    }
-
-    const rivers = new Graphics();
-    const roads = new Graphics();
+    const groups = new Map<
+      string,
+      { terrain: string; tileId: string; variant: number; builder: MeshBuilder }
+    >();
+    const relief = new Graphics();
 
     for (let row = 0; row < this.world.height; row += 1) {
       for (let col = 0; col < this.world.width; col += 1) {
         const index = row * this.world.width + col;
         const axial = offsetToAxial({ col, row });
-        const center = hexToPixel(axial, HEX_SIZE);
         const terrain = this.world.terrain[index] ?? "ocean";
-        const group = groups.get(terrain) ?? groups.get("grassland");
-        if (group) drawHex(group, center, HEX_SIZE, getTerrain(terrain).color);
+        const tileId = terrainTextureId(terrain);
+        const variant = hashString(`${this.world.seed}:${col}:${row}:${terrain}`) % 3;
+        const key = `${terrain}:${variant}`;
+        let group = groups.get(key);
+        if (!group) {
+          group = { terrain, tileId, variant, builder: new MeshBuilder() };
+          groups.set(key, group);
+        }
+        addFlatHexTop(group.builder, axial, HEX_SIZE);
+
+        const here = this.world.elevation[index] ?? 0.5;
+        const north = this.world.elevation[index - this.world.width] ?? here;
+        const west = this.world.elevation[index - 1] ?? here;
+        const slope = (here - north) * 0.65 + (here - west) * 0.35;
+        if (!getTerrain(terrain).water && Math.abs(slope) > 0.012) {
+          const center = hexToPixel(axial, HEX_SIZE);
+          const alpha = Math.min(0.18, Math.abs(slope) * 0.55);
+          drawHex(relief, center, HEX_SIZE * 0.98, slope > 0 ? 0xfff1cf : 0x050505, alpha);
+        }
       }
     }
+
+    for (const group of groups.values()) {
+      const color = getTerrain(group.terrain).color;
+      const mesh = meshFrom(group.builder, tileTexture(group.tileId, color, group.variant));
+      if (mesh) this.camera.addChild(mesh);
+    }
+    this.camera.addChild(relief);
+
+    const rivers = new Graphics();
+    const roads = new Graphics();
 
     // Rivers are drawn as connected strokes rather than filled hexes, so the
     // water reads as a channel even at low zoom.

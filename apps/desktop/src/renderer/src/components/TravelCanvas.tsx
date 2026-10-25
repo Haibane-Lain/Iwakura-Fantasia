@@ -11,6 +11,8 @@ export interface TravelCanvasProps {
   companions: TravelCompanionMarker[];
   enemies: TravelEnemyGroup[];
   paused?: boolean;
+  hour?: number;
+  reduceMotion?: boolean;
   onAnchor: (hex: Hex) => void;
   onHover: (hex: Hex | null) => void;
   onFacing: (direction: number) => void;
@@ -23,6 +25,8 @@ export function TravelCanvas({
   companions,
   enemies,
   paused = false,
+  hour = 12,
+  reduceMotion = false,
   onAnchor,
   onHover,
   onFacing,
@@ -32,7 +36,7 @@ export function TravelCanvas({
   const rendererRef = useRef<TravelRenderer | null>(null);
   const callbacksRef = useRef({ onAnchor, onHover, onFacing });
   const pausedRef = useRef(paused);
-  const initialRef = useRef({ map, partyHex, partyName, companions, enemies });
+  const initialRef = useRef({ map, partyHex, partyName, companions, enemies, hour, reduceMotion });
   const [error, setError] = useState<string | null>(null);
 
   callbacksRef.current = { onAnchor, onHover, onFacing };
@@ -73,6 +77,8 @@ export function TravelCanvas({
             onHover: (hex) => callbacksRef.current.onHover(hex),
             onFacing: (direction) => callbacksRef.current.onFacing(direction),
           },
+          initial.hour,
+          initial.reduceMotion,
         );
         rendererRef.current = renderer;
         renderer.setPaused(pausedRef.current);
@@ -106,6 +112,14 @@ export function TravelCanvas({
   useEffect(() => {
     rendererRef.current?.setPaused(paused);
   }, [paused]);
+
+  useEffect(() => {
+    rendererRef.current?.setHour(hour);
+  }, [hour]);
+
+  useEffect(() => {
+    rendererRef.current?.setReduceMotion(reduceMotion);
+  }, [reduceMotion]);
 
   if (error) {
     return (

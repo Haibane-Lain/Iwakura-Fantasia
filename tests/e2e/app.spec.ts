@@ -107,8 +107,12 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
     await expect(window.getByText("Travel Map").first()).toBeVisible({ timeout: 10_000 });
     await expect(window.getByText("Road edges").first()).toBeVisible();
     await expect(window.getByText("WASD", { exact: true }).first()).toBeVisible();
+    // Screen-relative movement: the Redford gate sits east of the outside hex,
+    // which projects down-right on screen, so D+S walks back through it.
     await window.keyboard.down("d");
+    await window.keyboard.down("s");
     await window.waitForTimeout(550);
+    await window.keyboard.up("s");
     await window.keyboard.up("d");
     await expect(window.getByText("People here").first()).toBeVisible({ timeout: 10_000 });
     await window

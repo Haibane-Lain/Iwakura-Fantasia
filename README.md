@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** All milestones M0–M8 complete. Travel Map, vertical slice, installer, and live OpenCode Go verified.
+**Status:** All milestones M0–M8 complete, plus the isometric field-art pass. Travel Map, vertical slice, installer, and live OpenCode Go verified.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md) · **Acceptance:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
@@ -24,35 +24,34 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Procedural world generation** in a Web Worker: elevation, climate, moisture, rivers, lakes, biomes, settlements, dungeons, landmarks, and terrain-aware road networks.
 - **World validation report** with hard errors and warnings before a world can be entered.
 - **Handcrafted world packs** with a sample region, Redford Reach, and the same runtime schema as generated worlds.
-- **PixiJS atlas/world map** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and fast travel.
-- **Travel Map**: each world hex expands into a deterministic detailed field map with roads, rivers, forests, settlement outskirts, edge gates, visible enemy groups, and smooth WASD movement.
+- **Textured PixiJS atlas** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and fast travel.
+- **Isometric Travel Map**: each world hex expands into a deterministic field diorama with textured hex terrain, extruded hills and cliffs, roads, rivers, forest props, settlement gates, edge gates, visible enemy groups, and smooth screen-relative WASD movement.
+- **Procedural isometric art**: seeded canvas textures and simple textured meshes for terrain, buildings, props, and figures. No external art dependency and no mandatory asset pipeline.
 - **Organic crossings**: walk through a road edge to enter the neighbouring world hex, or through a settlement gate to load its town map. Town maps accept WASD or click movement; leaving returns to the same gate.
-- **Seamless combat**: visible enemy groups auto-aggro and turn the current Travel Map into the battle field; victory, retreat, and defeat return to the field.
+- **Seamless combat**: visible enemy groups auto-aggro and turn the current field into an isometric battle map; victory, retreat, and defeat return to the field.
 - **World time and campaign saves**: travel advances the clock, reveals fog, discovers landmarks, and persists through SQLite.
 - **Character creation wizard**: 3 ancestries, 3 classes, 3 backgrounds, point buy, standard array, rolled 4d6 stats, class/background skill choices, appearance, portrait, sigil, name, and pronouns.
 - **Derived character rules**: ancestry bonuses, HP, AC, Focus, speed, proficiency, saves, skills, starting kit, auto-equipped weapon and armor.
 - **Character sheet** with Overview, Inventory, and Skills tabs, equip/unequip actions, and deterministic skill rolls that advance the campaign RNG.
 - **Procedural portraits and sigils** generated from a seed and palette, with no external art dependency.
-- **Town and dungeon local maps** built on the same hex geometry and pathfinding as the world map, with buildings, exits, local travel, hover paths, and save/continue inside a location.
+- **Isometric town and dungeon maps** built on the same hex geometry and pathfinding as the world map, with extruded walls, building meshes and roofs, props, screen-space labels, exits, local travel, hover paths, and save/continue inside a location.
 - **NPCs with hourly schedules** across seven authored characters plus a generic road trader fallback for procedural settlements.
 - **Authored dialogue** with quest-state roots, relationship changes, merchants, and a free-speech AI hook that streams an in-character reply from the local gateway.
 - **Merchant trade** with per-campaign stock, buy/sell validation, gold, inventory, and equipped-item protection.
 - **Quest journal and state machine**: accept, reveal targets on the map, progress reach/interact objectives, turn in for gold and items.
 - **The Mill That Stopped** and **The Greywatch Light** authored quests, plus a crypt ledger, dungeon encounter trigger, inn rest, and wait controls.
-- **Battle vertical slice**: initiative order, rounds, movement, melee attacks, class abilities, focus costs, shield/condition handling, simple enemy utility AI, victory/defeat/retreat, gold rewards, and a saved battle state. Encounter prompts start battles from the road or a dungeon.
+- **Isometric battle vertical slice**: initiative order, rounds, movement, melee attacks, class abilities, focus costs, shield/condition handling, simple enemy utility AI, active-unit rings, victory/defeat/retreat, gold rewards, and a saved battle state. Encounter prompts start battles from the road or a dungeon.
 - **Structured NPC AI turns**: a dedicated `/api/ai/npc` endpoint assembles the persona prompt, streams JSON from OpenCode Go, repairs common malformed intents, and validates every intent against the engine before applying disposition, memory, trade, quest, item, or combat changes.
 - **Live AI verified**: a real OpenCode Go turn streamed through the local gateway at 2.2 s and $0.0001, and a live Hessa turn produced a valid AI voice plus engine-applied trust and memory changes.
 - **Director and evolving quests**: validated director operations, procedural work templates, faction/rumor reactions, branching Greywatch outcomes, and a deterministic quest recap.
 - **Companions**: Wren can be recruited, fights on her own turn, comments at camp, tracks approval, can be dismissed, and participates in romance gates.
 - **Save and polish**: three manual save slots, JSON export/import, autosave, keyboard/accessibility pass, field guide, generated audio/VFX, high contrast, reduced motion, custom Windows icon, and NSIS installer.
-- **Tests**: 99 Vitest tests and a Playwright Electron smoke test covering world and character creation, Travel Map entry, atlas fast travel, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
+- **Tests**: 103 Vitest tests and a Playwright Electron smoke test covering world and character creation, isometric Travel Map entry and screen-relative movement, atlas fast travel, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
 - **Packaged Windows build** via electron-builder: 4.27 MB `app.asar`, no native modules. `pnpm package:installer` produces a 112 MB NSIS setup executable with the custom icon.
 
 ![Travel Map](docs/images/travel-map.png)
 
 ![Atlas and fast travel](docs/images/atlas.png)
-
-![Travel combat](docs/images/travel-encounter.png)
 
 ![AI Lab](docs/images/ai-lab.png)
 
@@ -164,7 +163,7 @@ The Electron app reads the OS keystore first, then falls back to `OPENCODE_API_K
 │                                                                  │
 │  Renderer (sandboxed, no Node)                                   │
 │  ├─ React 19 UI                                                  │
-│  ├─ PixiJS 8 (atlas, field, local, and battle renderers)          │
+│  ├─ PixiJS 8 (textured atlas, isometric field/local/battle)      │
 │  ├─ game engine package (rules, worldgen, travel, combat)         │
 │  └─ typed API client + SSE                                       │
 └──────────────────────────────────────────────────────────────────┘
@@ -220,12 +219,13 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 - Character progression currently stops at level 1. Subclasses, feats, level-up UI, and level 5+ content are not implemented yet.
 - Standard array is assigned through six selects; rolled stats are auto-assigned by class priority. Drag-and-drop stat assignment and manual rolled assignment are deferred.
 - Class skill choices exclude skills already granted by background or ancestry. There are no expertise or tool proficiencies yet.
-- The world map renders terrain in batched PixiJS layers rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
+- The world map renders textured terrain through batched PixiJS meshes rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
 - The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred.
 - The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.
 - Travel Maps use one detailed map per world hex. Each is deterministic, but currently a single biome-driven layout template; handcrafted landmark silhouettes, weather systems, patrol schedules, and local events are post-slice.
-- Town and dungeon maps use a dedicated local PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
-- Travel Map movement is smooth WASD after the first field is entered. Town interiors also accept WASD step movement or click-to-walk, with automatic exit when an exit hex is reached.
+- Town and dungeon maps use an isometric PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
+- Travel Map movement is smooth, screen-relative WASD after the first field is entered. Town interiors also accept WASD step movement or click-to-walk, with automatic exit when an exit hex is reached.
+- The isometric art pass generates textures and meshes at runtime. There is no external asset pipeline, LOD system, or baked field-chunk cache yet; weather and water animation are intentionally light.
 - Fast travel is available from the atlas and consumes world time; it is not restricted to strictly discovered road segments yet.
 - Handcrafted Redford, Millbrook, and the Old Mill Crypt have authored local maps and NPCs. Procedural settlements share a generic settlement layout and a generic road trader rather than unique generated towns.
 - NPC schedules are hour-granular and computed from the campaign clock. NPCs do not pathfind between spots; they are placed at the active schedule spot when the local map is viewed.
@@ -240,7 +240,7 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Post-slice roadmap
 
-- More handcrafted travel maps, unique biome layouts, weather, interiors, and dungeon encounters.
+- More handcrafted travel maps, unique biome layouts, weather, water animation, interiors, and dungeon encounters.
 - Deeper combat: full conditions, reactions, manual companion control, and richer enemy tactics.
 - Travel encounters with patrols, stealth/avoidance, mounted travel, and encounter-specific objectives.
 - More procedural quest templates, faction arcs, companions, and romance content.

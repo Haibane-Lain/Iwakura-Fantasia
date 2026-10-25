@@ -115,6 +115,8 @@ export function BattleScreen() {
       hex: unit.position,
       palette: unit.palette ?? "ember",
       activity: `${unit.hp}/${unit.maxHp} hp`,
+      kind: "enemy" as const,
+      active: unit.id === battle.activeUnitId,
     })),
     ...battle.units
       .filter((unit) => unit.kind === "companion" && !unit.defeated)
@@ -124,6 +126,8 @@ export function BattleScreen() {
         hex: unit.position,
         palette: unit.palette ?? "moss",
         activity: `${unit.hp}/${unit.maxHp} hp`,
+        kind: "companion" as const,
+        active: unit.id === battle.activeUnitId,
       })),
   ];
 
@@ -135,6 +139,9 @@ export function BattleScreen() {
           map={map}
           partyHex={player?.position ?? map.entrance}
           npcs={markers}
+          hour={campaign.clock.hour}
+          partyActive={active?.kind === "player"}
+          reduceMotion={settings?.settings.reduceMotion ?? false}
           onSelect={(hex) => {
             const unit = battleUnitAt(battle, hex);
             if (unit && unit.team === "enemy") setSelectedId(unit.id);

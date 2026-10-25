@@ -736,8 +736,9 @@ This panel is the difference between tuning the AI in days and guessing for week
 ### 11.1 Visual direction (placeholder)
 
 - Parchment/ink vector aesthetic: warm off-white, charcoal ink, muted jewel accents.
-- Hex tiles drawn with Pixi Graphics + subtle noise; no external art required.
-- Unit tokens: colored disc + sigil/initial + faction ring; portraits as procedural layered silhouettes.
+- Isometric field diorama: fixed orthographic three-quarter view, seeded canvas textures, extruded cliffs and walls, simple building meshes, billboard props, and screen-space labels.
+- The strategic atlas stays top-down and cartographic so fog, long paths, and landmark discovery remain readable.
+- Unit tokens: layered paper-doll figures with palette tint, soft shadows, and faction rings; portraits as procedural layered silhouettes.
 - Icon set: game-icons.net (CC-BY) + custom SVGs.
 - Typography: serif for prose and titles, sans for UI; local variable fonts.
 - Design tokens in CSS variables so the art pass is a skin change, not a rewrite.
@@ -1072,7 +1073,9 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 
 **M8 notes:**
 - The atlas remains available for inspection and fast travel. Travel is the primary field movement mode.
+- The field, town, dungeon, and battle views use a fixed isometric 2.5D renderer with seeded textures, extruded terrain, simple building meshes, props, and screen-space labels. The atlas remains top-down.
 - Each field map is 40×28 hexes. The renderer keeps smooth sub-hex motion locally; the engine save stores the authoritative anchor hex.
+- Dungeon encounters prefer the current local map as the battlefield; road encounters use the current travel map.
 - Encounters use the current field map, preserve terrain/cover/high ground, and remove defeated groups from the field and future regenerations.
 - Procedural villages still reuse the generic settlement interior; handcrafted towns keep their authored interiors.
 - Current field movement is smooth WASD; local town interiors accept WASD step movement or click-to-walk and auto-exit on an exit hex. Manual companion override and patrol schedules remain post-slice.

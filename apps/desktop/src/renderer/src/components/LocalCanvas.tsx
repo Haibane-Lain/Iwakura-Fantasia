@@ -8,11 +8,23 @@ export interface LocalCanvasProps {
   map: LocalMap;
   partyHex: Hex;
   npcs: LocalNpcMarker[];
+  hour?: number;
+  partyActive?: boolean;
+  reduceMotion?: boolean;
   onSelect: (hex: Hex) => void;
   onHover: (hex: Hex | null) => void;
 }
 
-export function LocalCanvas({ map, partyHex, npcs, onSelect, onHover }: LocalCanvasProps) {
+export function LocalCanvas({
+  map,
+  partyHex,
+  npcs,
+  hour = 12,
+  partyActive = false,
+  reduceMotion = false,
+  onSelect,
+  onHover,
+}: LocalCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
   const rendererRef = useRef<LocalRenderer | null>(null);
@@ -20,12 +32,18 @@ export function LocalCanvas({ map, partyHex, npcs, onSelect, onHover }: LocalCan
   const mapRef = useRef(map);
   const partyRef = useRef(partyHex);
   const npcRef = useRef(npcs);
+  const hourRef = useRef(hour);
+  const partyActiveRef = useRef(partyActive);
+  const reduceMotionRef = useRef(reduceMotion);
   const [error, setError] = useState<string | null>(null);
 
   callbacksRef.current = { onSelect, onHover };
   mapRef.current = map;
   partyRef.current = partyHex;
   npcRef.current = npcs;
+  hourRef.current = hour;
+  partyActiveRef.current = partyActive;
+  reduceMotionRef.current = reduceMotion;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -49,10 +67,19 @@ export function LocalCanvas({ map, partyHex, npcs, onSelect, onHover }: LocalCan
           return;
         }
         host.appendChild(app.canvas);
-        const renderer = new LocalRenderer(app, mapRef.current, partyRef.current, npcRef.current, {
-          onSelect: (hex) => callbacksRef.current.onSelect(hex),
-          onHover: (hex) => callbacksRef.current.onHover(hex),
-        });
+        const renderer = new LocalRenderer(
+          app,
+          mapRef.current,
+          partyRef.current,
+          npcRef.current,
+          {
+            onSelect: (hex) => callbacksRef.current.onSelect(hex),
+            onHover: (hex) => callbacksRef.current.onHover(hex),
+          },
+          hourRef.current,
+          partyActiveRef.current,
+          reduceMotionRef.current,
+        );
         rendererRef.current = renderer;
       })
       .catch((caught) => {
@@ -82,6 +109,18 @@ export function LocalCanvas({ map, partyHex, npcs, onSelect, onHover }: LocalCan
   useEffect(() => {
     rendererRef.current?.update(map, partyHex, npcs);
   }, [map, partyHex, npcs]);
+
+  useEffect(() => {
+    rendererRef.current?.setHour(hour);
+  }, [hour]);
+
+  useEffect(() => {
+    rendererRef.current?.setPartyActive(partyActive);
+  }, [partyActive]);
+
+  useEffect(() => {
+    rendererRef.current?.setReduceMotion(reduceMotion);
+  }, [reduceMotion]);
 
   if (error) {
     return (

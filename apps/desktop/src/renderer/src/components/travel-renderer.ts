@@ -1,50 +1,23 @@
 import { getLocalTile, getPalette } from "@iwakura/content";
 import type { Hex, LocalMap, TravelEnemyGroup } from "@iwakura/contracts";
-import {
-  axialToOffset,
-  cornerOffset,
-  hashString,
-  hexToPixel,
-  localTileAt,
-  offsetToAxial,
-  type Point,
-  pixelToHex,
-} from "@iwakura/engine";
-import { type Application, Container, Graphics, Point as PixiPoint, Rectangle, Text } from "pixi.js";
+import { axialToOffset, hashString, hexToPixel, localTileAt, type Point, pixelToHex } from "@iwakura/engine";
+import { type Application, Container, Graphics, Rectangle } from "pixi.js";
+import { addGatehouse } from "../render/iso/buildings";
+import { followIsoCamera, screenToWorld } from "../render/iso/camera";
+import { IsoLabelLayer, makeLabel } from "../render/iso/labels";
+import { mapIsoBounds, tileHeight, tileVariant, timeTint } from "../render/iso/layout";
+import { addHexSides, addHexTop, addRibbon, MeshBuilder, meshFrom } from "../render/iso/mesh";
+import { projectHex, projectHexCorners, projectPoint, screenVectorToWorld } from "../render/iso/projection";
+import { addProp, createFigure, type FigureView } from "../render/iso/props";
+import { roadSegments, waterSegments } from "../render/iso/roads";
+import { ribbonTexture, terrainSideTexture, terrainTopColor, tileTexture } from "../render/iso/textures";
 
 const HEX_SIZE = 34;
 const WALK_SPEED = 190;
 const SPRINT_SPEED = 310;
-const LABEL_ZOOM = 0.55;
-
-function hexPoints(center: { x: number; y: number }, size: number): number[] {
-  const points: number[] = [];
-  for (let corner = 0; corner < 6; corner += 1) {
-    const offset = cornerOffset(corner, size);
-    points.push(center.x + offset.x, center.y + offset.y);
-  }
-  return points;
-}
-
-function colorWithVariation(color: number, variation: number): number {
-  const r = Math.max(0, Math.min(255, ((color >> 16) & 0xff) + variation));
-  const g = Math.max(0, Math.min(255, ((color >> 8) & 0xff) + variation));
-  const b = Math.max(0, Math.min(255, (color & 0xff) + variation));
-  return (r << 16) | (g << 8) | b;
-}
-
-function label(text: string, color = 0xe9dfc8, size = 8): Text {
-  return new Text({
-    text,
-    style: {
-      fontFamily: "Palatino Linotype, Georgia, serif",
-      fontSize: size,
-      fill: color,
-      stroke: { color: 0x080706, width: 3 },
-      align: "center",
-    },
-  });
-}
+const LABEL_ZOOM = 0.44;
+const CAMERA_MIN_ZOOM = 0.55;
+const CAMERA_MAX_ZOOM = 2.35;
 
 export interface TravelCompanionMarker {
   id: string;
@@ -58,14 +31,48 @@ export interface TravelRendererCallbacks {
   onFacing: (direction: number) => void;
 }
 
+interface CompanionView {
+  figure: FigureView;
+  label: ReturnType<IsoLabelLayer["add"]>;
+  offset: Hex;
+}
+
+function offsetHex(hex: Hex, q: number, r: number): Hex {
+  return { q: hex.q + q, r: hex.r + r };
+}
+
+function nearestFacing(dx: number, dy: number): number {
+  const directions = [
+    { q: 1, r: 0 },
+    { q: 1, r: -1 },
+    { q: 0, r: -1 },
+    { q: -1, r: 0 },
+    { q: -1, r: 1 },
+    { q: 0, r: 1 },
+  ];
+  const length = Math.hypot(dx, dy) || 1;
+  let best = 0;
+  let bestDot = -Infinity;
+  for (let index = 0; index < directions.length; index += 1) {
+    const direction = directions[index]!;
+    const dot = (dx / length) * direction.q + (dy / length) * direction.r;
+    if (dot > bestDot) {
+      bestDot = dot;
+      best = index;
+    }
+  }
+  return best;
+}
+
 export class TravelRenderer {
   private readonly camera = new Container();
-  private readonly terrainLayer = new Graphics();
-  private readonly propLayer = new Graphics();
-  private readonly markerLayer = new Container();
-  private readonly dynamicLayer = new Container();
-  private readonly playerLayer = new Container();
-  private readonly labels: Array<{ text: Text; hex: Hex }> = [];
+  private readonly terrainLayer = new Container();
+  private readonly decalLayer = new Container();
+  private readonly overlayLayer = new Graphics();
+  private readonly aggroLayer = new Graphics();
+  private readonly objectLayer = new Container();
+  private readonly tintLayer = new Graphics();
+  private readonly labels: IsoLabelLayer;
   private readonly keys = new Set<string>();
   private readonly callbacks: TravelRendererCallbacks;
   private readonly tick: (ticker: { deltaMS: number }) => void;
@@ -73,14 +80,20 @@ export class TravelRenderer {
   private readonly keyUp: (event: KeyboardEvent) => void;
   private readonly wheelHandler: (event: WheelEvent) => void;
   private playerPixel: Point;
-  private readonly partyOrigin: Point;
-  private readonly mapBounds: { minX: number; maxX: number; minY: number; maxY: number };
+  private readonly mapBounds: ReturnType<typeof mapIsoBounds>;
   private playerHex: Hex;
-  private scale = 1.05;
+  private scale = 1;
   private hoverHex: Hex | null = null;
   private paused = false;
   private lastFacing = 0;
   private destroyed = false;
+  private elapsed = 0;
+  private hour: number;
+  private reduceMotion: boolean;
+  private playerFigure!: FigureView;
+  private playerLabel!: ReturnType<IsoLabelLayer["add"]>;
+  private readonly companionViews: CompanionView[] = [];
+  private readonly figures: FigureView[] = [];
 
   constructor(
     private readonly app: Application,
@@ -90,28 +103,41 @@ export class TravelRenderer {
     companions: TravelCompanionMarker[],
     private readonly enemies: TravelEnemyGroup[],
     callbacks: TravelRendererCallbacks,
+    hour = 12,
+    reduceMotion = false,
   ) {
     this.playerHex = partyHex;
     this.playerPixel = hexToPixel(partyHex, HEX_SIZE);
-    this.partyOrigin = this.playerPixel;
-    this.mapBounds = this.computeMapBounds();
+    this.mapBounds = mapIsoBounds(map, HEX_SIZE, 74);
     this.callbacks = callbacks;
+    this.hour = hour;
+    this.reduceMotion = reduceMotion;
+
+    this.objectLayer.sortableChildren = true;
     this.app.stage.addChild(this.camera);
     this.camera.addChild(
       this.terrainLayer,
-      this.propLayer,
-      this.markerLayer,
-      this.dynamicLayer,
-      this.playerLayer,
+      this.decalLayer,
+      this.aggroLayer,
+      this.overlayLayer,
+      this.objectLayer,
+      this.tintLayer,
     );
+    this.labels = new IsoLabelLayer(app);
+
     this.drawTerrain();
+    this.drawRoads();
     this.drawProps();
     this.drawMarkers();
     this.drawEnemies();
     this.drawParty(companions);
+    this.drawTint();
     this.bindInput();
     this.focusCamera();
-    window.requestAnimationFrame(() => this.focusCamera());
+    window.requestAnimationFrame(() => {
+      if (!this.destroyed) this.focusCamera();
+    });
+
     this.tick = (ticker) => this.update(ticker.deltaMS);
     this.app.ticker.add(this.tick);
     this.keyDown = (event) => this.onKeyDown(event);
@@ -128,18 +154,114 @@ export class TravelRenderer {
     if (paused) this.keys.clear();
   }
 
+  setHour(hour: number): void {
+    this.hour = hour;
+    this.drawTint();
+  }
+
+  setReduceMotion(reduceMotion: boolean): void {
+    this.reduceMotion = reduceMotion;
+    if (reduceMotion) {
+      for (const figure of this.figures) figure.body.y = 0;
+    }
+  }
+
   private drawTerrain(): void {
+    const background = new Graphics();
+    const corners = [
+      { col: 0, row: 0 },
+      { col: this.map.width - 1, row: 0 },
+      { col: this.map.width - 1, row: this.map.height - 1 },
+      { col: 0, row: this.map.height - 1 },
+    ].map((point) =>
+      projectPoint(hexToPixel({ q: point.col - Math.floor(point.row / 2), r: point.row }, HEX_SIZE)),
+    );
+    background
+      .poly(
+        corners.flatMap((point) => [point.x, point.y]),
+        true,
+      )
+      .fill({ color: 0x050504, alpha: 0.48 });
+    this.terrainLayer.addChild(background);
+
+    const topGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
+    const sideGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
+
     for (let row = 0; row < this.map.height; row += 1) {
       for (let col = 0; col < this.map.width; col += 1) {
         const hex = { q: col - Math.floor(row / 2), r: row };
-        const center = hexToPixel(hex, HEX_SIZE);
-        const tile = getLocalTile(localTileAt(this.map, hex));
-        const variation = (hashString(`${this.map.id}:${hex.q}:${hex.r}:${tile.id}`) % 25) - 12;
-        this.terrainLayer
-          .poly(hexPoints(center, HEX_SIZE), true)
-          .fill({ color: colorWithVariation(tile.color, variation), alpha: 1 })
-          .stroke({ color: 0x080706, width: 0.7, alpha: 0.2 });
+        const tileId = localTileAt(this.map, hex);
+        const variant = tileVariant(this.map.id, hex, tileId);
+        const key = `${tileId}:${variant}`;
+        let top = topGroups.get(key);
+        if (!top) {
+          top = { tileId, variant, builder: new MeshBuilder() };
+          topGroups.set(key, top);
+        }
+        const z = tileHeight(tileId);
+        addHexTop(top.builder, hex, HEX_SIZE, z);
+        if (z > 0) {
+          let side = sideGroups.get(key);
+          if (!side) {
+            side = { tileId, variant, builder: new MeshBuilder() };
+            sideGroups.set(key, side);
+          }
+          addHexSides(side.builder, hex, HEX_SIZE, z);
+        }
       }
+    }
+
+    for (const group of topGroups.values()) {
+      const color = getLocalTile(group.tileId).color;
+      const mesh = meshFrom(
+        group.builder,
+        tileTexture(group.tileId, terrainTopColor(group.tileId, color), group.variant),
+      );
+      if (mesh) this.terrainLayer.addChild(mesh);
+    }
+    for (const group of sideGroups.values()) {
+      const color = getLocalTile(group.tileId).color;
+      const mesh = meshFrom(group.builder, terrainSideTexture(group.tileId, color, group.variant));
+      if (mesh) this.terrainLayer.addChild(mesh);
+    }
+  }
+
+  private drawRoads(): void {
+    const roadShadow = new MeshBuilder();
+    const roadSurface = new MeshBuilder();
+    const bridgeSurface = new MeshBuilder();
+    const waterSurface = new MeshBuilder();
+
+    for (const segment of roadSegments(this.map)) {
+      const center = projectHex(segment.from, HEX_SIZE, 0.04);
+      const target = projectHex(segment.to, HEX_SIZE, 0.04);
+      addRibbon(roadShadow, center, target, { width: 16 });
+      addRibbon(segment.bridge ? bridgeSurface : roadSurface, center, target, { width: 11 });
+    }
+    for (const segment of waterSegments(this.map)) {
+      addRibbon(
+        waterSurface,
+        projectHex(segment.from, HEX_SIZE, 0.02),
+        projectHex(segment.to, HEX_SIZE, 0.02),
+        {
+          width: 26,
+        },
+      );
+    }
+
+    const shadow = meshFrom(roadShadow, ribbonTexture("road", 0x3f3428));
+    if (shadow) {
+      shadow.alpha = 0.72;
+      this.decalLayer.addChild(shadow);
+    }
+    const road = meshFrom(roadSurface, ribbonTexture("road", getLocalTile("road").color));
+    if (road) this.decalLayer.addChild(road);
+    const bridge = meshFrom(bridgeSurface, ribbonTexture("road", getLocalTile("bridge").color));
+    if (bridge) this.decalLayer.addChild(bridge);
+    const water = meshFrom(waterSurface, ribbonTexture("water", getLocalTile("water").color));
+    if (water) {
+      water.alpha = 0.55;
+      this.decalLayer.addChild(water);
     }
   }
 
@@ -147,107 +269,66 @@ export class TravelRenderer {
     for (let row = 0; row < this.map.height; row += 1) {
       for (let col = 0; col < this.map.width; col += 1) {
         const hex = { q: col - Math.floor(row / 2), r: row };
-        const center = hexToPixel(hex, HEX_SIZE);
-        const tile = localTileAt(this.map, hex);
-        const seed = hashString(`${this.map.id}:props:${hex.q}:${hex.r}:${tile}`);
-        const jitter = (amount: number) => ((seed % (amount * 2 + 1)) - amount) * 0.55;
-        if (tile === "tree") {
-          this.propLayer
-            .ellipse(center.x + jitter(8), center.y + 8, 13, 5)
-            .fill({ color: 0x11180f, alpha: 0.28 });
-          this.propLayer.rect(center.x - 1.5 + jitter(5), center.y + 1, 3, 12).fill({ color: 0x4b3524 });
-          this.propLayer
-            .circle(center.x - 4 + jitter(5), center.y - 2, 9)
-            .fill({ color: 0x263c24 })
-            .circle(center.x + 5 + jitter(5), center.y - 4, 7)
-            .fill({ color: 0x344c2c })
-            .circle(center.x + 1 + jitter(5), center.y - 10, 6)
-            .fill({ color: 0x405a34 });
-        } else if (tile === "brush" || tile === "grass" || tile === "field") {
-          const tufts = 3 + (seed % 4);
-          for (let index = 0; index < tufts; index += 1) {
-            const x = center.x + jitter(18);
-            const y = center.y + jitter(14);
-            this.propLayer
-              .moveTo(x, y)
-              .lineTo(x + 2, y - 4)
-              .stroke({ color: tile === "field" ? 0x9a8a50 : 0x87925f, width: 1, alpha: 0.65 });
-          }
-          if (seed % 11 === 0) {
-            this.propLayer
-              .circle(center.x + jitter(15), center.y + jitter(12), 2)
-              .fill({ color: 0xc9a35a, alpha: 0.85 });
-          }
-        } else if (tile === "water") {
-          for (let index = 0; index < 3; index += 1) {
-            const x = center.x - 13 + index * 9 + jitter(4);
-            const y = center.y + jitter(12);
-            this.propLayer
-              .moveTo(x - 5, y)
-              .quadraticCurveTo(x, y - 4, x + 5, y)
-              .stroke({ color: 0x7babb5, width: 1, alpha: 0.38 });
-          }
-        } else if (tile === "marsh") {
-          for (let index = 0; index < 4; index += 1) {
-            const x = center.x + jitter(16);
-            const y = center.y + jitter(12);
-            this.propLayer
-              .moveTo(x, y + 5)
-              .lineTo(x + 1, y - 5)
-              .stroke({ color: 0x9ba875, width: 1.2, alpha: 0.65 });
-          }
-        } else if (tile === "rock" || tile === "cliff") {
-          const points = [
-            center.x - 11 + jitter(4),
-            center.y + 8,
-            center.x - 5 + jitter(4),
-            center.y - 8,
-            center.x + 4 + jitter(4),
-            center.y - 5,
-            center.x + 12 + jitter(4),
-            center.y + 7,
-          ];
-          this.propLayer
-            .poly(points, true)
-            .fill({ color: tile === "cliff" ? 0x4a463f : 0x5d574c })
-            .stroke({
-              color: 0x27251f,
-              width: 1,
-              alpha: 0.55,
+        const tileId = localTileAt(this.map, hex);
+        const seed = hashString(`${this.map.id}:props:${hex.q}:${hex.r}:${tileId}`);
+        const z = tileHeight(tileId);
+        const base = projectHex(hex, HEX_SIZE, z);
+        if (tileId === "tree") {
+          const count = 2 + (seed % 2);
+          for (let index = 0; index < count; index += 1) {
+            const angle = (index / count) * Math.PI * 2 + (seed % 17) * 0.13;
+            const radius = 4 + ((seed >> (index * 3)) % 9);
+            const point = {
+              x: base.x + Math.cos(angle) * radius,
+              y: base.y + Math.sin(angle) * radius * 0.42,
+            };
+            const kind = seed % 5 === 0 ? "pine" : "tree";
+            const sprite = addProp(this.objectLayer, kind, point, {
+              scale: 0.52 + ((seed >> (index * 2)) % 15) / 100,
+              variant: seed % 3,
             });
-        } else if (tile === "sand" || tile === "snow") {
-          for (let index = 0; index < 5; index += 1) {
-            this.propLayer
-              .circle(center.x + jitter(20), center.y + jitter(16), 0.9)
-              .fill({ color: tile === "snow" ? 0xf3f5ef : 0x77683f, alpha: 0.55 });
+            sprite.zIndex = point.y;
           }
-        } else if (tile === "road" || tile === "plaza") {
-          this.propLayer
-            .moveTo(center.x - 20, center.y + 4)
-            .lineTo(center.x + 20, center.y - 3)
-            .stroke({ color: 0x6a5a43, width: 1, alpha: 0.4 });
-          this.propLayer
-            .moveTo(center.x - 17, center.y - 6)
-            .lineTo(center.x + 18, center.y + 5)
-            .stroke({ color: 0x6a5a43, width: 0.8, alpha: 0.28 });
-        } else if (tile === "crop") {
-          for (let index = 0; index < 4; index += 1) {
-            this.propLayer
-              .moveTo(center.x - 17 + index * 10, center.y - 11)
-              .lineTo(center.x - 17 + index * 10, center.y + 11)
-              .stroke({ color: 0xb3a35b, width: 2, alpha: 0.55 });
-          }
-        } else if (tile === "ruin_floor") {
-          this.propLayer
-            .rect(center.x - 10 + jitter(4), center.y - 2, 8, 5)
-            .fill({ color: 0x8a8170, alpha: 0.6 })
-            .rect(center.x + 3 + jitter(4), center.y + 4, 7, 4)
-            .fill({ color: 0x5b5448, alpha: 0.7 });
-        } else if (tile === "high_ground") {
-          this.propLayer
-            .moveTo(center.x - 16, center.y + 7)
-            .quadraticCurveTo(center.x, center.y + 2, center.x + 16, center.y + 7)
-            .stroke({ color: 0xa99b77, width: 1.2, alpha: 0.45 });
+        } else if (tileId === "brush" || tileId === "marsh" || (tileId === "grass" && seed % 7 === 0)) {
+          const sprite = addProp(
+            this.objectLayer,
+            "bush",
+            { x: base.x, y: base.y },
+            {
+              scale: tileId === "marsh" ? 0.34 : 0.28,
+              variant: seed % 3,
+            },
+          );
+          sprite.zIndex = base.y;
+        } else if (tileId === "rock" || tileId === "cliff") {
+          const sprite = addProp(
+            this.objectLayer,
+            "rock",
+            { x: base.x, y: base.y },
+            {
+              scale: tileId === "cliff" ? 0.8 : 0.62,
+              variant: seed % 3,
+            },
+          );
+          sprite.zIndex = base.y;
+        } else if (tileId === "ruin_floor" && seed % 3 === 0) {
+          const sprite = addProp(this.objectLayer, seed % 2 === 0 ? "crate" : "rock", base, {
+            scale: 0.3,
+            variant: seed % 3,
+          });
+          sprite.zIndex = base.y;
+        } else if (tileId === "water" && seed % 11 === 0) {
+          const sprite = addProp(
+            this.objectLayer,
+            "glow",
+            { x: base.x, y: base.y - 2 },
+            {
+              scale: 0.22,
+              alpha: 0.22,
+              variant: 0,
+            },
+          );
+          sprite.zIndex = base.y;
         }
       }
     }
@@ -255,38 +336,34 @@ export class TravelRenderer {
 
   private drawMarkers(): void {
     for (const building of this.map.buildings) {
-      const center = hexToPixel(building.hex, HEX_SIZE);
-      const marker = new Graphics();
-      marker
-        .rect(center.x - 12, center.y - 8, 24, 16)
-        .fill({ color: 0x3b2f25, alpha: 0.95 })
-        .stroke({ color: 0xe8c987, width: 1.2, alpha: 0.8 });
-      marker.rect(center.x - 3, center.y - 1, 6, 9).fill({ color: 0xc9a35a, alpha: 0.9 });
-      this.markerLayer.addChild(marker);
-      const text = label(building.name, 0xf0e7d2, 8);
-      text.anchor.set(0.5, 1);
-      text.position.set(center.x, center.y - 12);
-      this.markerLayer.addChild(text);
-      this.labels.push({ text, hex: building.hex });
+      const kind =
+        building.kind === "gate"
+          ? "town"
+          : building.kind === "other"
+            ? "other"
+            : building.kind === "workshop"
+              ? "village"
+              : "town";
+      addGatehouse(this.objectLayer, building.hex, HEX_SIZE, kind);
+      const point = projectHex(building.hex, HEX_SIZE, 48);
+      const label = makeLabel(building.name, { color: 0xf0e7d2, size: 9 });
+      this.labels.add(label, point, { anchorY: 1, offsetY: -2, minZoom: LABEL_ZOOM });
     }
+
     for (const exit of this.map.exits) {
-      const center = hexToPixel(exit.hex, HEX_SIZE);
+      const point = projectHex(exit.hex, HEX_SIZE, 0.12);
       const marker = new Graphics();
       marker
-        .poly(
-          [center.x, center.y - 10, center.x + 9, center.y, center.x, center.y + 10, center.x - 9, center.y],
-          true,
-        )
-        .fill({ color: 0x8fb5b6, alpha: 0.9 })
+        .poly([point.x, point.y - 9, point.x + 8, point.y, point.x, point.y + 8, point.x - 8, point.y], true)
+        .fill({ color: 0x8fb5b6, alpha: 0.92 })
         .stroke({ color: 0x080706, width: 1.4 });
-      marker.circle(center.x, center.y, 3).fill({ color: 0xe8f2ee, alpha: 0.9 });
-      this.markerLayer.addChild(marker);
-      const text = label(exit.name, 0xb9d0cd, 8);
-      text.anchor.set(0.5, 0);
-      text.position.set(center.x, center.y + 12);
-      this.markerLayer.addChild(text);
-      this.labels.push({ text, hex: exit.hex });
+      marker.circle(point.x, point.y, 2.4).fill({ color: 0xe8f2ee, alpha: 0.9 });
+      marker.zIndex = point.y;
+      this.objectLayer.addChild(marker);
+      const label = makeLabel(exit.name, { color: 0xb9d0cd, size: 8 });
+      this.labels.add(label, point, { anchorY: 0, offsetY: 10, minZoom: LABEL_ZOOM });
     }
+
     for (const interactable of this.map.interactables) {
       if (
         this.map.buildings.some(
@@ -295,95 +372,93 @@ export class TravelRenderer {
       ) {
         continue;
       }
-      const center = hexToPixel(interactable.hex, HEX_SIZE);
+      const point = projectHex(interactable.hex, HEX_SIZE, 0.1);
       const marker = new Graphics();
       marker
-        .rect(center.x - 6, center.y - 6, 12, 12)
-        .fill({ color: 0xc9a35a, alpha: 0.9 })
-        .stroke({ color: 0x080706, width: 1.3 });
-      this.markerLayer.addChild(marker);
-      const text = label(interactable.name, 0xe8dcc0, 8);
-      text.anchor.set(0.5, 0);
-      text.position.set(center.x, center.y + 11);
-      this.markerLayer.addChild(text);
-      this.labels.push({ text, hex: interactable.hex });
+        .rect(point.x - 5, point.y - 5, 10, 10)
+        .fill({ color: 0xc9a35a, alpha: 0.92 })
+        .stroke({ color: 0x080706, width: 1.2 });
+      marker.zIndex = point.y;
+      this.objectLayer.addChild(marker);
+      const label = makeLabel(interactable.name, { color: 0xe8dcc0, size: 8 });
+      this.labels.add(label, point, { anchorY: 0, offsetY: 10, minZoom: LABEL_ZOOM });
     }
   }
 
   private drawEnemies(): void {
     const palette = getPalette("ember");
     for (const group of this.enemies) {
-      const center = hexToPixel(group.hex, HEX_SIZE);
-      const marker = new Graphics();
-      marker
-        .circle(center.x, center.y, group.aggroRadius * HEX_SIZE * 0.34)
-        .fill({ color: 0x8e3d36, alpha: 0.06 })
-        .stroke({ color: 0x8e3d36, width: 0.8, alpha: 0.12 });
-      marker
-        .circle(center.x, center.y, 11)
-        .fill({ color: palette.cloak })
-        .stroke({ color: 0x080706, width: 2 });
-      marker.circle(center.x, center.y, 13).stroke({ color: 0xd9a39d, width: 1.2, alpha: 0.8 });
-      this.dynamicLayer.addChild(marker);
-      const text = label(group.name, 0xe0b0aa, 8);
-      text.anchor.set(0.5, 0);
-      text.position.set(center.x, center.y + 13);
-      this.dynamicLayer.addChild(text);
-      this.labels.push({ text, hex: group.hex });
+      const point = projectHex(group.hex, HEX_SIZE, tileHeight(localTileAt(this.map, group.hex)));
+      const figure = createFigure(palette, { enemy: true, seed: group.id });
+      figure.container.position.set(point.x, point.y);
+      figure.container.zIndex = point.y;
+      this.objectLayer.addChild(figure.container);
+      this.figures.push(figure);
+      const label = makeLabel(group.name, { color: 0xe0b0aa, size: 8 });
+      this.labels.add(label, point, { anchorY: 0, offsetY: 10, minZoom: LABEL_ZOOM });
+
+      const radius = group.aggroRadius * HEX_SIZE * 0.58;
+      this.aggroLayer
+        .ellipse(point.x, point.y, radius, radius * 0.52)
+        .fill({ color: 0x8e3d36, alpha: 0.045 })
+        .stroke({ color: 0x8e3d36, width: 0.8, alpha: 0.16 });
     }
   }
 
   private drawParty(companions: TravelCompanionMarker[]): void {
-    const center = this.playerPixel;
-    const shadow = new Graphics();
-    shadow.ellipse(center.x, center.y + 8, 13, 5).fill({ color: 0x080706, alpha: 0.4 });
-    this.playerLayer.addChild(shadow);
-    const token = new Graphics();
-    token
-      .circle(center.x, center.y, 15)
-      .fill({ color: 0xe8c987, alpha: 0.14 })
-      .stroke({ color: 0xf5e6c8, width: 1.3 });
-    token.circle(center.x, center.y, 8).fill({ color: 0xe8c987 }).stroke({ color: 0x080706, width: 2 });
-    token.circle(center.x, center.y, 3).fill({ color: 0x080706 });
-    this.playerLayer.addChild(token);
-    const text = label(this.partyName, 0xf5e6c8, 8);
-    text.anchor.set(0.5, 0);
-    text.position.set(center.x, center.y + 16);
-    this.playerLayer.addChild(text);
-    this.labels.push({ text, hex: this.playerHex });
+    const palette = getPalette("gold");
+    const point = projectHex(this.playerHex, HEX_SIZE, tileHeight(localTileAt(this.map, this.playerHex)));
+    this.playerFigure = createFigure(palette, { seed: this.partyName });
+    this.playerFigure.container.position.set(point.x, point.y);
+    this.playerFigure.container.zIndex = point.y;
+    this.objectLayer.addChild(this.playerFigure.container);
+    this.figures.push(this.playerFigure);
+    this.playerLabel = this.labels.add(makeLabel(this.partyName, { color: 0xf5e6c8, size: 9 }), point, {
+      anchorY: 0,
+      offsetY: 10,
+      minZoom: LABEL_ZOOM,
+    });
 
-    const offsets: Array<{ q: number; r: number }> = [
+    const offsets: Hex[] = [
       { q: -1, r: 0 },
       { q: 0, r: 1 },
       { q: 1, r: -1 },
     ];
     for (const [index, companion] of companions.entries()) {
       const offset = offsets[index % offsets.length]!;
-      const companionHex = {
-        q: this.playerHex.q + offset.q,
-        r: this.playerHex.r + offset.r,
-      };
-      const point = hexToPixel(companionHex, HEX_SIZE);
-      const palette = getPalette(companion.palette);
-      const marker = new Graphics();
-      marker
-        .circle(point.x, point.y, 9)
-        .fill({ color: palette.cloak })
-        .stroke({ color: palette.ink, width: 1.5 });
-      this.playerLayer.addChild(marker);
-      const initials = label(
-        companion.name
-          .split(/\s+/)
-          .slice(0, 2)
-          .map((part) => part[0] ?? "")
-          .join(""),
-        0xf0e7d2,
-        7,
-      );
-      initials.anchor.set(0.5);
-      initials.position.set(point.x, point.y);
-      this.playerLayer.addChild(initials);
+      const companionPalette = getPalette(companion.palette);
+      const figure = createFigure(companionPalette, { companion: true, seed: companion.id });
+      const hex = offsetHex(this.playerHex, offset.q, offset.r);
+      const companionPoint = projectHex(hex, HEX_SIZE, tileHeight(localTileAt(this.map, hex)));
+      figure.container.position.set(companionPoint.x, companionPoint.y);
+      figure.container.zIndex = companionPoint.y;
+      this.objectLayer.addChild(figure.container);
+      this.figures.push(figure);
+      const initials = companion.name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part[0] ?? "")
+        .join("");
+      const label = this.labels.add(makeLabel(initials, { color: 0xf0e7d2, size: 7 }), companionPoint, {
+        anchorY: 0,
+        offsetY: 9,
+        minZoom: LABEL_ZOOM,
+      });
+      this.companionViews.push({ figure, label, offset });
     }
+  }
+
+  private drawTint(): void {
+    this.tintLayer.clear();
+    const tint = timeTint(this.hour);
+    this.tintLayer
+      .rect(
+        this.mapBounds.minX,
+        this.mapBounds.minY,
+        this.mapBounds.maxX - this.mapBounds.minX,
+        this.mapBounds.maxY - this.mapBounds.minY,
+      )
+      .fill({ color: tint.color, alpha: tint.alpha });
   }
 
   private onKeyDown(event: KeyboardEvent): void {
@@ -413,42 +488,68 @@ export class TravelRenderer {
 
   private update(deltaMS: number): void {
     if (this.destroyed) return;
-    let dx = 0;
-    let dy = 0;
-    if (this.keys.has("a")) dx -= 1;
-    if (this.keys.has("d")) dx += 1;
-    if (this.keys.has("w")) dy -= 1;
-    if (this.keys.has("s")) dy += 1;
-    if (dx === 0 && dy === 0) return;
-    const length = Math.hypot(dx, dy);
-    const speed = this.keys.has("shift") ? SPRINT_SPEED : WALK_SPEED;
-    const distance = (speed * deltaMS) / 1000;
-    const next = {
-      x: this.playerPixel.x + (dx / length) * distance,
-      y: this.playerPixel.y + (dy / length) * distance,
-    };
-    if (this.canStand(next.x, next.y)) {
-      this.playerPixel = next;
-    } else if (this.canStand(next.x, this.playerPixel.y)) {
-      this.playerPixel = { x: next.x, y: this.playerPixel.y };
-    } else if (this.canStand(this.playerPixel.x, next.y)) {
-      this.playerPixel = { x: this.playerPixel.x, y: next.y };
+    this.elapsed += deltaMS;
+    let screenX = 0;
+    let screenY = 0;
+    if (this.keys.has("a")) screenX -= 1;
+    if (this.keys.has("d")) screenX += 1;
+    if (this.keys.has("w")) screenY -= 1;
+    if (this.keys.has("s")) screenY += 1;
+
+    if (screenX !== 0 || screenY !== 0) {
+      const length = Math.hypot(screenX, screenY);
+      const speed = this.keys.has("shift") ? SPRINT_SPEED : WALK_SPEED;
+      const screenDistance = (speed * deltaMS) / 1000;
+      const worldDelta = screenVectorToWorld(
+        (screenX / length) * screenDistance,
+        (screenY / length) * screenDistance,
+      );
+      const next = {
+        x: this.playerPixel.x + worldDelta.x,
+        y: this.playerPixel.y + worldDelta.y,
+      };
+      if (this.canStand(next.x, next.y)) {
+        this.playerPixel = next;
+      } else if (this.canStand(next.x, this.playerPixel.y)) {
+        this.playerPixel = { x: next.x, y: this.playerPixel.y };
+      } else if (this.canStand(this.playerPixel.x, next.y)) {
+        this.playerPixel = { x: this.playerPixel.x, y: next.y };
+      }
+      const facing = nearestFacing(worldDelta.x, worldDelta.y);
+      if (facing !== this.lastFacing) {
+        this.lastFacing = facing;
+        this.playerFigure.body.scale.x = facing >= 3 ? -1 : 1;
+        this.callbacks.onFacing(facing);
+      }
     }
-    const facing = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 3 : 0) : dy < 0 ? 2 : 5;
-    if (facing !== this.lastFacing) {
-      this.lastFacing = facing;
-      this.callbacks.onFacing(facing);
+
+    const tileId = localTileAt(this.map, this.playerHex);
+    const playerPoint = projectPoint(this.playerPixel, tileHeight(tileId));
+    this.playerFigure.container.position.set(playerPoint.x, playerPoint.y);
+    this.playerFigure.container.zIndex = playerPoint.y;
+    this.labels.setPoint(this.playerLabel, playerPoint);
+
+    for (const view of this.companionViews) {
+      const hex = offsetHex(this.playerHex, view.offset.q, view.offset.r);
+      const point = projectHex(hex, HEX_SIZE, tileHeight(localTileAt(this.map, hex)));
+      view.figure.container.position.set(point.x, point.y);
+      view.figure.container.zIndex = point.y;
+      this.labels.setPoint(view.label, point);
     }
-    this.playerLayer.position.set(
-      this.playerPixel.x - this.partyOrigin.x,
-      this.playerPixel.y - this.partyOrigin.y,
-    );
+
+    if (!this.reduceMotion) {
+      for (const figure of this.figures) {
+        figure.body.y = Math.sin(this.elapsed * 0.003 + figure.phase) * 0.8;
+      }
+    }
+
     const hex = pixelToHex(this.playerPixel, HEX_SIZE);
     if (hex.q !== this.playerHex.q || hex.r !== this.playerHex.r) {
       this.playerHex = hex;
       this.callbacks.onAnchor(hex);
     }
     this.focusCamera();
+    this.labels.update(this.camera);
   }
 
   private canStand(x: number, y: number): boolean {
@@ -465,46 +566,10 @@ export class TravelRenderer {
     return getLocalTile(localTileAt(this.map, hex)).walkable;
   }
 
-  private computeMapBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
-    const corners = [
-      { col: 0, row: 0 },
-      { col: this.map.width - 1, row: 0 },
-      { col: 0, row: this.map.height - 1 },
-      { col: this.map.width - 1, row: this.map.height - 1 },
-    ].map((offset) => hexToPixel(offsetToAxial(offset), HEX_SIZE));
-    const halfWidth = HEX_SIZE * 0.9;
-    return {
-      minX: Math.min(...corners.map((point) => point.x)) - halfWidth,
-      maxX: Math.max(...corners.map((point) => point.x)) + halfWidth,
-      minY: Math.min(...corners.map((point) => point.y)) - HEX_SIZE,
-      maxY: Math.max(...corners.map((point) => point.y)) + HEX_SIZE,
-    };
-  }
-
   private focusCamera(): void {
-    this.camera.scale.set(this.scale);
-    const screenWidth = this.app.screen.width;
-    const screenHeight = this.app.screen.height;
-    let x = screenWidth / 2 - this.playerPixel.x * this.scale;
-    let y = screenHeight / 2 - this.playerPixel.y * this.scale;
-    const mapWidth = (this.mapBounds.maxX - this.mapBounds.minX) * this.scale;
-    const mapHeight = (this.mapBounds.maxY - this.mapBounds.minY) * this.scale;
-    x =
-      mapWidth <= screenWidth
-        ? screenWidth / 2 - ((this.mapBounds.minX + this.mapBounds.maxX) / 2) * this.scale
-        : Math.max(
-            screenWidth - this.mapBounds.maxX * this.scale,
-            Math.min(-this.mapBounds.minX * this.scale, x),
-          );
-    y =
-      mapHeight <= screenHeight
-        ? screenHeight / 2 - ((this.mapBounds.minY + this.mapBounds.maxY) / 2) * this.scale
-        : Math.max(
-            screenHeight - this.mapBounds.maxY * this.scale,
-            Math.min(-this.mapBounds.minY * this.scale, y),
-          );
-    this.camera.position.set(x, y);
-    for (const entry of this.labels) entry.text.visible = this.scale > LABEL_ZOOM;
+    const point = projectPoint(this.playerPixel, tileHeight(localTileAt(this.map, this.playerHex)));
+    followIsoCamera(this.app, this.camera, this.mapBounds, point);
+    this.labels.update(this.camera);
   }
 
   handleResize(): void {
@@ -514,17 +579,27 @@ export class TravelRenderer {
 
   private onWheel(event: WheelEvent): void {
     event.preventDefault();
-    const factor = event.deltaY < 0 ? 1.1 : 0.91;
-    this.scale = Math.max(0.5, Math.min(2.3, this.scale * factor));
+    const rect = this.app.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const before = {
+      x: (x - this.camera.position.x) / this.camera.scale.x,
+      y: (y - this.camera.position.y) / this.camera.scale.y,
+    };
+    const factor = event.deltaY < 0 ? 1.12 : 0.89;
+    this.scale = Math.max(CAMERA_MIN_ZOOM, Math.min(CAMERA_MAX_ZOOM, this.scale * factor));
+    this.camera.scale.set(this.scale);
+    this.camera.position.set(x - before.x * this.scale, y - before.y * this.scale);
     this.focusCamera();
+    this.labels.update(this.camera);
   }
 
   private bindInput(): void {
     this.app.stage.eventMode = "static";
     this.app.stage.hitArea = new Rectangle(0, 0, this.app.screen.width, this.app.screen.height);
     this.app.stage.on("pointermove", (event) => {
-      const local = this.camera.toLocal(new PixiPoint(event.global.x, event.global.y));
-      const hex = pixelToHex(local, HEX_SIZE);
+      const world = screenToWorld(this.camera, event.global.x, event.global.y);
+      const hex = pixelToHex(world, HEX_SIZE);
       const offset = axialToOffset(hex);
       const bounded =
         offset.col >= 0 && offset.col < this.map.width && offset.row >= 0 && offset.row < this.map.height
@@ -533,11 +608,27 @@ export class TravelRenderer {
       if (bounded?.q === this.hoverHex?.q && bounded?.r === this.hoverHex?.r) return;
       this.hoverHex = bounded;
       this.callbacks.onHover(bounded);
+      this.drawHover();
     });
     this.app.stage.on("pointerleave", () => {
       this.hoverHex = null;
       this.callbacks.onHover(null);
+      this.drawHover();
     });
+  }
+
+  private drawHover(): void {
+    this.overlayLayer.clear();
+    if (!this.hoverHex) return;
+    const z = tileHeight(localTileAt(this.map, this.hoverHex)) + 0.05;
+    const points = projectHexCorners(this.hoverHex, HEX_SIZE, z, 1.4);
+    this.overlayLayer
+      .poly(
+        points.flatMap((point) => [point.x, point.y]),
+        true,
+      )
+      .fill({ color: 0xe8c987, alpha: 0.1 })
+      .stroke({ color: 0xe8c987, width: 2, alpha: 0.9 });
   }
 
   destroy(): void {
@@ -546,6 +637,7 @@ export class TravelRenderer {
     window.removeEventListener("keydown", this.keyDown);
     window.removeEventListener("keyup", this.keyUp);
     this.app.canvas.removeEventListener("wheel", this.wheelHandler);
+    this.labels.destroy();
     this.app.destroy({ removeView: true }, { children: true });
   }
 }

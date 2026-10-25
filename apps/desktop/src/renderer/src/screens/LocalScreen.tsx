@@ -61,6 +61,7 @@ export function LocalScreen() {
   const saveCampaign = useAppStore((state) => state.saveCampaign);
   const setScreen = useAppStore((state) => state.setScreen);
   const setWorldMode = useAppStore((state) => state.setWorldMode);
+  const settings = useAppStore((state) => state.settings);
 
   const [selectedHex, setSelectedHex] = useState<Hex | null>(campaign?.local?.position ?? null);
   const [hoverHex, setHoverHex] = useState<Hex | null>(null);
@@ -92,13 +93,15 @@ export function LocalScreen() {
       ) {
         return;
       }
+      // Keys follow the isometric screen, not the underlying axial grid.
+      // W/S/A/D cover the four screen cardinals; Q/E fill the upper diagonals.
       const directions: Record<string, { q: number; r: number }> = {
-        w: { q: 0, r: -1 },
-        e: { q: 1, r: -1 },
-        a: { q: -1, r: 0 },
-        d: { q: 1, r: 0 },
-        q: { q: -1, r: 1 },
-        s: { q: 0, r: 1 },
+        w: { q: -1, r: -1 },
+        e: { q: 0, r: -1 },
+        d: { q: 1, r: -1 },
+        s: { q: 1, r: 1 },
+        a: { q: -1, r: 1 },
+        q: { q: -1, r: 0 },
       };
       const direction = directions[event.key.toLowerCase()];
       if (!direction) return;
@@ -258,6 +261,8 @@ export function LocalScreen() {
           map={map}
           partyHex={local.position}
           npcs={markers}
+          hour={campaign.clock.hour}
+          reduceMotion={settings?.settings.reduceMotion ?? false}
           onSelect={(hex) => {
             const npc = npcAtLocalHex(campaign, hex);
             setSelectedHex(hex);
@@ -344,7 +349,7 @@ export function LocalScreen() {
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <Footprints className="size-3.5 text-gold/60" />
             <span>
-              WASD walk · click a hex · scroll to zoom ·{" "}
+              WASD/QE walk · click a hex · scroll to zoom ·{" "}
               {extra ? `${extra.name} under cursor` : "inspect the town"}
             </span>
           </div>
