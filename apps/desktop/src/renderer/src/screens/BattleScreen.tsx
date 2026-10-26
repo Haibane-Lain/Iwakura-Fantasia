@@ -1,4 +1,4 @@
-import { getAbility } from "@iwakura/content";
+import { getAbility, getCondition } from "@iwakura/content";
 import type { Hex } from "@iwakura/contracts";
 import {
   battleAttack,
@@ -53,9 +53,9 @@ export function BattleScreen() {
     window.setTimeout(() => setFlash(false), 240);
   };
 
-  const showCue = (actorId: string, kind: ActorVisualCueKind, targetId?: string) => {
+  const showCue = (actorId: string, kind: ActorVisualCueKind, targetId?: string, damage?: number) => {
     cueNonce.current += 1;
-    setVisualCue({ nonce: cueNonce.current, actorId, kind, targetId });
+    setVisualCue({ nonce: cueNonce.current, actorId, kind, targetId, damage });
   };
 
   useEffect(() => {
@@ -72,14 +72,25 @@ export function BattleScreen() {
   const playerEntity = campaign.entities.player;
   const active = battle.units.find((unit) => unit.id === battle.activeUnitId);
   const enemies = battle.units.filter((unit) => unit.team === "enemy" && !unit.defeated);
+  const partyUnits = battle.units.filter((unit) => unit.team === "party" && !unit.defeated);
   const selected = battle.units.find((unit) => unit.id === selectedId && !unit.defeated) ?? enemies[0];
   const playerTurn = active?.kind === "player" && battle.status === "active";
-  const adjacent = Boolean(player && selected && distance(player.position, selected.position) <= 1);
+  const adjacent = Boolean(
+    player && selected && selected.team === "enemy" && distance(player.position, selected.position) <= 1,
+  );
   const movementLeft = player ? player.speed - player.moved : 0;
   const abilities =
     playerEntity?.abilityIds
       .map((id) => getAbility(id))
       .filter((ability): ability is NonNullable<typeof ability> => Boolean(ability)) ?? [];
+
+  const targetValid = (ability: NonNullable<ReturnType<typeof getAbility>>) => {
+    if (ability.targetType === "self" || ability.targeting === "self") return true;
+    if (!selected) return false;
+    if (ability.targetType === "enemy") return selected.team === "enemy";
+    if (ability.targetType === "ally") return selected.team === "party";
+    return true;
+  };
 
   const persist = async (state: typeof campaign) => {
     if (state) await saveCampaign(state);
@@ -92,10 +103,13 @@ export function BattleScreen() {
   };
 
   const attack = () => {
-    if (!selected || !playerTurn) return;
+    if (selected?.team !== "enemy" || !playerTurn) return;
+    const beforeHp = selected.hp;
     const next = battleAttack(campaign, selected.id);
     if (next) {
-      showCue("party", "attack", selected.id);
+      const after = next.battle?.units.find((unit) => unit.id === selected.id);
+      const damage = after ? Math.max(0, beforeHp - after.hp) : 0;
+      showCue("party", "attack", selected.id, damage);
       impact();
       void persist(next);
     }
@@ -106,9 +120,14 @@ export function BattleScreen() {
     const ability = getAbility(abilityId);
     if (!ability) return;
     const target = ability.targeting === "self" ? undefined : selected?.id;
+    const beforeHp = target
+      ? (campaign.battle?.units.find((unit) => unit.id === target)?.hp ?? 0)
+      : undefined;
     const next = battleUseAbility(campaign, abilityId, target);
     if (next) {
-      showCue("party", abilityId.includes("shield") ? "guard" : "cast", target ?? "party");
+      const after = target ? next.battle?.units.find((unit) => unit.id === target) : undefined;
+      const damage = beforeHp !== undefined && after ? Math.max(0, beforeHp - after.hp) : undefined;
+      showCue("party", abilityId.includes("shield") ? "guard" : "cast", target ?? "party", damage);
       impact();
       void persist(next);
     }
@@ -187,6 +206,7 @@ export function BattleScreen() {
             conditions: player?.conditions ?? [],
           }}
           cue={visualCue}
+          tacticalGrid
           onSelect={(hex) => {
             const unit = battleUnitAt(battle, hex);
             if (unit && unit.team === "enemy") setSelectedId(unit.id);
@@ -333,7 +353,8 @@ export function BattleScreen() {
                       const damaged = next.battle?.units.find(
                         (unit) => (before.get(unit.id) ?? unit.hp) > unit.hp,
                       );
-                      showCue(actorId, "attack", damaged?.kind === "player" ? "party" : damaged?.id);
+                      const damage = damaged ? (before.get(damaged.id) ?? damaged.hp) - damaged.hp : 0;
+                      showCue(actorId, "attack", damaged?.kind === "player" ? "party" : damaged?.id, damage);
                       void persist(next);
                     }
                   }}
@@ -359,7 +380,8 @@ export function BattleScreen() {
                       const damaged = next.battle?.units.find(
                         (unit) => (before.get(unit.id) ?? unit.hp) > unit.hp,
                       );
-                      showCue(actorId, "attack", damaged?.kind === "player" ? "party" : damaged?.id);
+                      const damage = damaged ? (before.get(damaged.id) ?? damaged.hp) - damaged.hp : 0;
+                      showCue(actorId, "attack", damaged?.kind === "player" ? "party" : damaged?.id, damage);
                       void persist(next);
                     }
                   }}
@@ -393,12 +415,29 @@ export function BattleScreen() {
                     </button>
                   ))}
                 </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {partyUnits.map((unit) => (
+                    <button
+                      key={unit.id}
+                      type="button"
+                      className={cn(
+                        "chip",
+                        selected?.id === unit.id ? "border-moss/60 text-[#c6d1a4]" : "hover:border-line",
+                      )}
+                      onClick={() => setSelectedId(unit.id)}
+                    >
+                      <Heart className="size-2.5" />
+                      {unit.name} · {unit.hp}/{unit.maxHp} hp
+                      {unit.tempHp > 0 ? ` (+${unit.tempHp})` : ""}
+                    </button>
+                  ))}
+                </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     className="btn"
                     onClick={attack}
-                    disabled={!selected || !adjacent || Boolean(player?.actionUsed)}
+                    disabled={selected?.team !== "enemy" || !adjacent || Boolean(player?.actionUsed)}
                   >
                     <Swords className="size-3.5" />
                     Attack
@@ -409,12 +448,25 @@ export function BattleScreen() {
                   </button>
                 </div>
                 <div className="mt-3">
-                  <div className="kicker">Abilities</div>
+                  <div className="flex items-center justify-between">
+                    <div className="kicker">Abilities</div>
+                    <span className="text-[9px] text-faint">select a target above</span>
+                  </div>
                   <div className="mt-1.5 grid gap-1.5">
                     {abilities.map((ability) => {
                       const cost = ability.cost;
                       const focus = playerEntity?.focus.current ?? 0;
-                      const disabled = Boolean(player?.actionUsed) || focus < cost;
+                      const actionBlocked =
+                        ability.action === "bonus" ? Boolean(player?.bonusUsed) : Boolean(player?.actionUsed);
+                      const wrongTarget = !targetValid(ability);
+                      const disabled = actionBlocked || focus < cost || wrongTarget;
+                      const reason = actionBlocked
+                        ? `${ability.action} already used`
+                        : focus < cost
+                          ? "not enough focus"
+                          : wrongTarget
+                            ? "select a valid target"
+                            : undefined;
                       return (
                         <button
                           key={ability.id}
@@ -422,13 +474,15 @@ export function BattleScreen() {
                           className="flex items-center justify-between gap-2 border border-line-soft px-2 py-1.5 text-left text-[10px] text-parchment-dim hover:border-gold/40 disabled:text-faint"
                           disabled={disabled}
                           onClick={() => castAbility(ability.id)}
-                          title={ability.description}
+                          title={reason ? `${ability.description} — ${reason}` : ability.description}
                         >
-                          <span className="flex items-center gap-1.5">
-                            <Sparkles className="size-3 text-gold/60" />
-                            {ability.name}
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <Sparkles className="size-3 shrink-0 text-gold/60" />
+                            <span className="truncate">{ability.name}</span>
                           </span>
-                          <span className="font-mono text-[9px]">{cost} focus</span>
+                          <span className="shrink-0 font-mono text-[9px]">
+                            {ability.action} · {cost} focus
+                          </span>
                         </button>
                       );
                     })}
@@ -474,7 +528,10 @@ export function BattleScreen() {
           <Panel className="p-3">
             <div className="flex items-center gap-2 text-[9px] uppercase tracking-[0.1em] text-faint">
               <Shield className="size-3 text-gold/60" />
-              {player?.conditions.length ? player.conditions.join(", ") : "no conditions"}
+              {player?.conditions.length
+                ? player.conditions.map((id) => getCondition(id)?.name ?? id).join(" · ")
+                : "no conditions"}
+              {player?.tempHp ? ` · ${player.tempHp} temp hp` : ""}
             </div>
           </Panel>
         ) : null}

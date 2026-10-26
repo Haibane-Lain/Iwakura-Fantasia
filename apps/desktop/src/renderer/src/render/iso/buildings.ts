@@ -338,6 +338,20 @@ export function addBuildingVisuals(
   const visuals = buildingVisuals(map, size);
   for (const visual of visuals) {
     const container = new Container();
+    const shadowBase = projectPoint(
+      { x: (visual.box.minX + visual.box.maxX) / 2, y: (visual.box.maxY + visual.box.minY) / 2 },
+      visual.box.baseZ + 0.01,
+    );
+    const shadow = new Graphics();
+    const width = (visual.box.maxX - visual.box.minX) * 0.62;
+    const depth = (visual.box.maxY - visual.box.minY) * 0.4;
+    shadow
+      .ellipse(shadowBase.x - width * 0.12, shadowBase.y + depth * 0.12, width, depth)
+      .fill({ color: 0x080706, alpha: 0.22 });
+    shadow
+      .ellipse(shadowBase.x - width * 0.04, shadowBase.y + depth * 0.06, width * 0.72, depth * 0.55)
+      .fill({ color: 0x080706, alpha: 0.16 });
+    container.addChild(shadow);
     const walls = addBuilding(visual.box);
     const wallTex: Texture = wallTexture(visual.style, visual.wallColor);
     const roofTex: Texture = roofTexture(visual.roofColor);
@@ -413,6 +427,10 @@ export function addGatehouse(
       roofHeight: 11,
       ridgeAlongX: true,
     };
+    const base = projectPoint({ x: (box.minX + box.maxX) / 2, y: (box.maxY + box.minY) / 2 }, 0.06);
+    const shadow = new Graphics();
+    shadow.ellipse(base.x, base.y + 5, width * 0.58, depth * 0.65).fill({ color: 0x080706, alpha: 0.2 });
+    container.addChild(shadow);
     const walls = addBuilding(box);
     const wallMesh = meshFrom(walls.walls, wallTexture("stone", 0x7a7263));
     const roofMesh = meshFrom(walls.roof, roofTexture(0x54412f));

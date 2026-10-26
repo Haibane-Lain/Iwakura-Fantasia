@@ -1,17 +1,21 @@
-import { getAbility, getEnemy, getItem } from "@iwakura/content";
+import { getAbility, getClass, getCondition, getEnemy, getItem } from "@iwakura/content";
 import type {
+  Ability,
+  AbilityEffect,
   BattleState,
   BattleUnit,
+  DamageType,
   EnemyDefinition,
   Entity,
   GameState,
   Hex,
   LocalMap,
 } from "@iwakura/contracts";
-import { abilityModifier, proficiencyBonus } from "./character.js";
+import { abilityModifier, attackBonus, damageBonus, initiativeBonus, proficiencyBonus } from "./character.js";
 import { axialIndex, offsetToAxial } from "./grid.js";
 import { distance, findPath, hexKey, lineOfSight, neighbors } from "./hex.js";
 import { localIsWalkable } from "./local.js";
+import { awardMilestone } from "./progression.js";
 import { rngFromGameState } from "./state-rng.js";
 
 function timestamp(state: GameState): GameState["campaign"] {
@@ -33,6 +37,45 @@ function rollDice(rng: ReturnType<typeof rngFromGameState>, dice: string, extra 
   let total = parsed.bonus + extra;
   for (let i = 0; i < parsed.count; i += 1) total += rng.roll(parsed.sides);
   return Math.max(1, total);
+}
+
+function conditionValue(
+  unit: BattleUnit,
+  key: "acBonus" | "attackBonus" | "saveBonus" | "damageBonus" | "damageTakenBonus",
+): number {
+  return unit.conditions.reduce((sum, id) => {
+    const condition = getCondition(id);
+    return sum + (condition?.[key] ?? 0);
+  }, 0);
+}
+
+function withCondition(unit: BattleUnit, conditionId: string, duration: number): BattleUnit {
+  const existing = unit.conditionTurns[conditionId] ?? 0;
+  return {
+    ...unit,
+    conditions: [...new Set([...unit.conditions, conditionId])],
+    conditionTurns: { ...unit.conditionTurns, [conditionId]: Math.max(existing, duration) },
+  };
+}
+
+function applyDamage(unit: BattleUnit, amount: number, damageType: DamageType): BattleUnit {
+  const resisted =
+    unit.resistances.includes(damageType) ||
+    (unit.resistances.includes("physical") &&
+      ["physical", "slashing", "piercing", "bludgeoning"].includes(damageType));
+  const damage = Math.max(0, resisted ? Math.floor(amount / 2) : amount);
+  const absorbed = Math.min(unit.tempHp, damage);
+  const hp = Math.max(0, unit.hp - (damage - absorbed));
+  return {
+    ...unit,
+    tempHp: unit.tempHp - absorbed,
+    hp,
+    defeated: hp === 0,
+  };
+}
+
+function conditionLabel(unit: BattleUnit): string {
+  return unit.conditions.length > 0 ? ` [${unit.conditions.join(", ")}]` : "";
 }
 
 function battleLog(state: BattleState, line: string): BattleState {
@@ -151,6 +194,9 @@ function enemyUnit(def: EnemyDefinition, index: number, position: Hex, initiativ
     defeated: false,
     palette: def.palette,
     conditions: [],
+    conditionTurns: {},
+    tempHp: 0,
+    resistances: [],
   };
 }
 
@@ -191,7 +237,7 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
     maxHp: player.hp.max,
     ac: player.ac,
     speed: player.speed,
-    initiative: rng.d20() + abilityModifier(player.attributes.dex),
+    initiative: rng.d20() + initiativeBonus(player),
     position: playerPos,
     moved: 0,
     actionUsed: false,
@@ -199,6 +245,9 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
     defeated: false,
     palette: player.appearance?.palette ?? "gold",
     conditions: [],
+    conditionTurns: {},
+    tempHp: 0,
+    resistances: player.progression.resistances,
   };
 
   const occupied = new Set([hexKey(playerPos)]);
@@ -245,7 +294,7 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
       maxHp: entity.hp.max,
       ac: entity.ac,
       speed: entity.speed,
-      initiative: rng.d20() + abilityModifier(entity.attributes.dex),
+      initiative: rng.d20() + initiativeBonus(entity),
       position,
       moved: 0,
       actionUsed: false,
@@ -253,6 +302,9 @@ export function startBattle(state: GameState, options: StartBattleOptions): Game
       defeated: false,
       palette: entity.appearance?.palette ?? "moss",
       conditions: [],
+      conditionTurns: {},
+      tempHp: 0,
+      resistances: entity.progression.resistances,
     });
   }
 
@@ -342,20 +394,21 @@ function advanceTurn(battle: BattleState): BattleState {
   const wrapped = nextIndex <= currentIndex;
   const next = battle.units[nextIndex];
   if (!next) return battle;
-  const units = battle.units.map((unit) =>
-    unit.id === next.id
-      ? {
-          ...unit,
-          moved: 0,
-          actionUsed: false,
-          bonusUsed: false,
-          conditions:
-            unit.kind === "player"
-              ? unit.conditions.filter((entry) => entry !== "shielded")
-              : unit.conditions,
-        }
-      : unit,
-  );
+  const units = battle.units.map((unit) => {
+    if (unit.id !== next.id) return unit;
+    const conditionTurns: Record<string, number> = {};
+    for (const [id, turns] of Object.entries(unit.conditionTurns)) {
+      if (turns > 1) conditionTurns[id] = turns - 1;
+    }
+    return {
+      ...unit,
+      moved: 0,
+      actionUsed: false,
+      bonusUsed: false,
+      conditions: unit.conditions.filter((id) => (conditionTurns[id] ?? 0) > 0),
+      conditionTurns,
+    };
+  });
   return {
     ...battle,
     units,
@@ -423,29 +476,29 @@ export function battleAttack(state: GameState, targetId: string): GameState | nu
   if (attacking.actionUsed) return null;
   if (distance(attacking.position, target.position) > 1) return null;
   const rng = rngFromGameState(state);
+  const player = state.entities.player;
+  if (!player) return null;
   const bonus =
-    proficiencyBonus(state.entities.player?.level ?? 1) +
-    abilityModifier(state.entities.player?.attributes.str ?? 10) +
-    highGroundBonus(battle, attacking);
+    attackBonus(player, "str") +
+    highGroundBonus(battle, attacking) +
+    conditionValue(attacking, "attackBonus");
   const roll = rng.d20();
   const total = roll + bonus;
   const crit = roll === 20;
-  const player = state.entities.player;
   const weapon = player?.equipment.mainHand ? getItem(player.equipment.mainHand) : undefined;
   const dice = String(weapon?.stats.damage ?? "1d4");
-  const targetAc = target.ac + coverBonus(battle, target);
-  const damage =
+  const damageType = String(weapon?.stats.damageType ?? "physical") as DamageType;
+  const targetAc = target.ac + coverBonus(battle, target) + conditionValue(target, "acBonus");
+  const rawDamage =
     total >= targetAc
-      ? rollDice(rng, dice, abilityModifier(player?.attributes.str ?? 10)) * (crit ? 2 : 1)
+      ? rollDice(rng, dice, abilityModifier(player?.attributes.str ?? 10)) +
+        damageBonus(player) +
+        conditionValue(attacking, "damageBonus") +
+        conditionValue(target, "damageTakenBonus")
       : 0;
-  const hp = Math.max(0, target.hp - damage);
-  const defeated = hp === 0;
+  const damagedTarget = applyDamage(target, rawDamage * (crit ? 2 : 1), damageType);
   const units = battle.units.map((unit) =>
-    unit.id === target.id
-      ? { ...unit, hp, defeated }
-      : unit.id === attacking.id
-        ? { ...unit, actionUsed: true }
-        : unit,
+    unit.id === target.id ? damagedTarget : unit.id === attacking.id ? { ...unit, actionUsed: true } : unit,
   );
   let next: BattleState = {
     ...battle,
@@ -455,8 +508,10 @@ export function battleAttack(state: GameState, targetId: string): GameState | nu
       `${attacking.name} attacks ${target.name}: d20 ${roll} + ${bonus} = ${total} vs AC ${targetAc}${
         coverBonus(battle, target) > 0 ? " (cover)" : ""
       }${crit ? " (critical!)" : ""}.`,
-      ...(damage > 0
-        ? [`${target.name} takes ${damage} damage (${hp}/${target.maxHp} hp).`]
+      ...(rawDamage > 0
+        ? [
+            `${target.name} takes ${rawDamage * (crit ? 2 : 1)} damage (${damagedTarget.hp}/${target.maxHp} hp)${conditionLabel(target)}.`,
+          ]
         : ["The attack misses."]),
     ],
   };
@@ -465,83 +520,187 @@ export function battleAttack(state: GameState, targetId: string): GameState | nu
   return appendAndSync(synced, next);
 }
 
+function abilityAttribute(ability: Ability, player: Entity): keyof Entity["attributes"] {
+  if (ability.attribute) return ability.attribute;
+  const characterClass = player.classId ? getClass(player.classId) : undefined;
+  return characterClass?.spellAttribute ?? characterClass?.primaryAttributes[0] ?? "str";
+}
+
+function abilityTarget(
+  battle: BattleState,
+  ability: Ability,
+  actor: BattleUnit,
+  targetId?: string,
+): BattleUnit | null {
+  if (ability.targetType === "self" || ability.targeting === "self") return actor;
+  const target = targetId ? battle.units.find((unit) => unit.id === targetId) : undefined;
+  if (!target || target.defeated) return null;
+  if (ability.targetType === "enemy" && target.team !== "enemy") return null;
+  if (ability.targetType === "ally" && target.team !== "party") return null;
+  return target;
+}
+
 export function battleUseAbility(state: GameState, abilityId: string, targetId?: string): GameState | null {
   const battle = state.battle;
   if (battle?.status !== "active") return null;
   const actor = activePlayer(battle);
   const player = state.entities.player;
   const ability = getAbility(abilityId);
-  if (!actor || !player || !ability || actor.actionUsed) return null;
+  if (!actor || !player || !ability) return null;
+  if (ability.action === "bonus" ? actor.bonusUsed : actor.actionUsed) return null;
   if (player.focus.current < ability.cost) return null;
-  const rng = rngFromGameState(state);
-  const target = targetId ? battle.units.find((unit) => unit.id === targetId) : undefined;
-  const needsTarget = ability.targeting !== "self";
-  if (needsTarget && (!target || target.defeated || target.team === "party")) return null;
-  if (needsTarget && distance(actor.position, target!.position) > ability.rangeHexes) return null;
-  if (needsTarget && ability.rangeHexes > 1 && battle.map) {
-    if (!lineOfSight(actor.position, target!.position, (hex) => !localIsWalkable(battle.map!, hex))) {
+
+  const target = abilityTarget(battle, ability, actor, targetId);
+  if (ability.targeting !== "self" && !target) return null;
+  if (
+    target &&
+    ability.targetType !== "self" &&
+    distance(actor.position, target.position) > ability.rangeHexes
+  ) {
+    return null;
+  }
+  if (target && ability.rangeHexes > 1 && battle.map && distance(actor.position, target.position) > 1) {
+    if (!lineOfSight(actor.position, target.position, (hex) => !localIsWalkable(battle.map!, hex))) {
       return null;
     }
   }
 
+  const rng = rngFromGameState(state);
+  const attribute = abilityAttribute(ability, player);
+  const roll = ability.attack ? rng.d20() : 20;
+  const attackTotal =
+    roll +
+    attackBonus(player, attribute) +
+    highGroundBonus(battle, actor) +
+    conditionValue(actor, "attackBonus");
+  const targetAc = target ? target.ac + coverBonus(battle, target) + conditionValue(target, "acBonus") : 0;
+  const hit = !ability.attack || roll === 20 || attackTotal >= targetAc;
+  const crit = ability.attack && roll === 20;
+
   let units = battle.units;
   const log = [...battle.log.slice(-78)];
-  let focusCost = ability.cost;
+  let focus = player.focus.current;
+  const modify = (id: string, update: (unit: BattleUnit) => BattleUnit) => {
+    units = units.map((unit) => (unit.id === id ? update(unit) : unit));
+  };
+  const current = (id: string) => units.find((unit) => unit.id === id);
 
-  if (ability.id === "core:power_strike" || ability.id === "core:sneak_attack") {
-    const hit =
-      rng.d20() + proficiencyBonus(player.level) + abilityModifier(player.attributes.str) >= target!.ac;
-    const weapon = player.equipment.mainHand ? getItem(player.equipment.mainHand) : undefined;
-    const extra = ability.id === "core:power_strike" ? "1d6" : "1d6";
-    const damage = hit
-      ? rollDice(rng, String(weapon?.stats.damage ?? "1d4"), abilityModifier(player.attributes.str)) +
-        rollDice(rng, extra)
-      : 0;
-    const hp = Math.max(0, target!.hp - damage);
-    units = units.map((unit) =>
-      unit.id === target!.id
-        ? { ...unit, hp, defeated: hp === 0 }
-        : unit.id === actor.id
-          ? { ...unit, actionUsed: true }
-          : unit,
+  if (ability.attack && target) {
+    log.push(
+      `${actor.name} uses ${ability.name} on ${target.name}: d20 ${roll} + ${attackTotal - roll} = ${attackTotal} vs AC ${targetAc}${crit ? " (critical!)" : hit ? "" : " (miss)"}.`,
     );
-    log.push(`${actor.name} uses ${ability.name} on ${target!.name}: ${hit ? `${damage} damage` : "miss"}.`);
-  } else if (ability.id === "core:firebolt") {
-    const hit =
-      rng.d20() + proficiencyBonus(player.level) + abilityModifier(player.attributes.int) >= target!.ac;
-    const damage = hit ? rollDice(rng, "1d10") : 0;
-    const hp = Math.max(0, target!.hp - damage);
-    units = units.map((unit) =>
-      unit.id === target!.id
-        ? { ...unit, hp, defeated: hp === 0 }
-        : unit.id === actor.id
-          ? { ...unit, actionUsed: true }
-          : unit,
-    );
-    log.push(`${actor.name} casts ${ability.name}: ${hit ? `${damage} fire damage` : "miss"}.`);
-  } else if (ability.id === "core:shield") {
-    units = units.map((unit) =>
-      unit.id === actor.id
-        ? { ...unit, actionUsed: true, conditions: [...new Set([...unit.conditions, "shielded"])] }
-        : unit,
-    );
-    log.push(`${actor.name} raises a shield of force (+5 AC).`);
-  } else if (ability.id === "core:second_wind") {
-    const heal = rollDice(rng, "1d10", player.level);
-    const hp = Math.min(actor.maxHp, actor.hp + heal);
-    units = units.map((unit) => (unit.id === actor.id ? { ...unit, hp, actionUsed: true } : unit));
-    log.push(`${actor.name} recovers ${heal} hit points (${hp}/${actor.maxHp} hp).`);
-  } else if (ability.id === "core:cunning_action") {
-    units = units.map((unit) => (unit.id === actor.id ? { ...unit, moved: 0, actionUsed: true } : unit));
-    focusCost = ability.cost;
-    log.push(`${actor.name} repositions with ${ability.name}.`);
   } else {
-    return null;
+    log.push(`${actor.name} uses ${ability.name}.`);
   }
+
+  for (const effect of ability.effects as AbilityEffect[]) {
+    const targetsTarget = effect.kind !== "movement" && effect.kind !== "resource";
+    if (ability.attack && !hit && targetsTarget) continue;
+    switch (effect.kind) {
+      case "damage": {
+        if (!target) break;
+        const weapon = player.equipment.mainHand ? getItem(player.equipment.mainHand) : undefined;
+        const dice = effect.dice ?? String(weapon?.stats.damage ?? "1d4");
+        const damageType =
+          effect.damageType ?? (weapon?.stats.damageType as DamageType | undefined) ?? "physical";
+        const extra =
+          (effect.addAttribute ? abilityModifier(player.attributes[effect.addAttribute]) : 0) +
+          effect.bonus +
+          (effect.addLevel ? player.level : 0) +
+          (effect.scaling === "level"
+            ? player.level
+            : effect.scaling === "level_div_2"
+              ? Math.floor(player.level / 2)
+              : 0) +
+          damageBonus(player) +
+          conditionValue(actor, "damageBonus") +
+          conditionValue(target, "damageTakenBonus");
+        const amount = rollDice(rng, dice, extra) * (crit ? 2 : 1);
+        modify(target.id, (unit) => applyDamage(unit, amount, damageType));
+        log.push(
+          `${target.name} takes ${amount} ${damageType} damage (${current(target.id)?.hp ?? 0}/${target.maxHp} hp)${conditionLabel(target)}.`,
+        );
+        break;
+      }
+      case "heal": {
+        const targetUnit = effect.target === "self" ? actor : target;
+        if (!targetUnit) break;
+        const amount = rollDice(
+          rng,
+          effect.dice,
+          (effect.addAttribute ? abilityModifier(player.attributes[effect.addAttribute]) : 0) +
+            effect.bonus +
+            (effect.addLevel ? player.level : 0),
+        );
+        modify(targetUnit.id, (unit) => ({
+          ...unit,
+          hp: Math.min(unit.maxHp, unit.hp + amount),
+          defeated: false,
+        }));
+        log.push(`${targetUnit.name} recovers ${amount} hit points.`);
+        break;
+      }
+      case "temp_hp": {
+        const targetUnit = effect.target === "self" ? actor : target;
+        if (!targetUnit) break;
+        const amount =
+          effect.value ??
+          rollDice(
+            rng,
+            effect.dice ?? "1d4",
+            effect.addAttribute ? abilityModifier(player.attributes[effect.addAttribute]) : 0,
+          );
+        modify(targetUnit.id, (unit) => ({ ...unit, tempHp: Math.max(unit.tempHp, amount) }));
+        log.push(`${targetUnit.name} gains ${amount} temporary hit points.`);
+        break;
+      }
+      case "condition": {
+        const targetUnit = effect.target === "self" ? actor : target;
+        if (!targetUnit) break;
+        modify(targetUnit.id, (unit) => withCondition(unit, effect.conditionId, effect.duration));
+        log.push(`${targetUnit.name} gains ${getCondition(effect.conditionId)?.name ?? effect.conditionId}.`);
+        break;
+      }
+      case "movement":
+        modify(actor.id, (unit) => ({ ...unit, moved: 0 }));
+        log.push(`${actor.name} repositions.`);
+        break;
+      case "resource":
+        if (effect.resource === "focus") {
+          focus = Math.min(player.focus.max, focus + effect.value);
+          log.push(`${actor.name} recovers ${effect.value} focus.`);
+        } else {
+          modify(actor.id, (unit) => ({
+            ...unit,
+            hp: Math.min(unit.maxHp, unit.hp + effect.value),
+            defeated: false,
+          }));
+          log.push(`${actor.name} recovers ${effect.value} hit points.`);
+        }
+        break;
+      case "cleanse": {
+        const targetUnit = effect.target === "self" ? actor : target;
+        if (!targetUnit) break;
+        modify(targetUnit.id, (unit) => ({ ...unit, conditions: [], conditionTurns: {} }));
+        log.push(`${targetUnit.name} is cleansed.`);
+        break;
+      }
+    }
+  }
+
+  const usesBonus = ability.action === "bonus";
+  modify(actor.id, (unit) =>
+    usesBonus
+      ? { ...unit, bonusUsed: true }
+      : ability.action === "free"
+        ? unit
+        : { ...unit, actionUsed: true },
+  );
+  focus = Math.max(0, focus - ability.cost);
 
   const nextPlayer: Entity = {
     ...player,
-    focus: { ...player.focus, current: Math.max(0, player.focus.current - focusCost) },
+    focus: { ...player.focus, current: focus },
   };
   let next: BattleState = { ...battle, units, log };
   next = checkEnd({ ...state, entities: { ...state.entities, player: nextPlayer } }, next);
@@ -587,27 +746,30 @@ export function battleEnemyTurn(state: GameState): GameState | null {
   }
   if (distance(position, player.position) <= 1 && !actionUsed) {
     const def = getEnemy(enemy.id.split(":").slice(2).join(":"));
-    const bonus = (def?.attackBonus ?? 2) + highGroundBonus(battle, enemy);
+    const bonus =
+      (def?.attackBonus ?? 2) + highGroundBonus(battle, enemy) + conditionValue(enemy, "attackBonus");
     const dice = def?.damageDice ?? "1d6";
-    const damageBonus = def?.damageBonus ?? 0;
     const roll = rng.d20();
     const total = roll + bonus;
-    const targetAc =
-      player.ac + (player.conditions.includes("shielded") ? 5 : 0) + coverBonus(battle, player);
+    const targetAc = player.ac + conditionValue(player, "acBonus") + coverBonus(battle, player);
     const hit = total >= targetAc;
-    const damage = hit ? rollDice(rng, dice, damageBonus) : 0;
-    const hp = Math.max(0, player.hp - damage);
+    const damage = hit
+      ? rollDice(
+          rng,
+          dice,
+          (def?.damageBonus ?? 0) +
+            conditionValue(enemy, "damageBonus") +
+            conditionValue(player, "damageTakenBonus"),
+        )
+      : 0;
+    const damagedPlayer = applyDamage(player, damage, "physical");
 
     units = units.map((unit) =>
-      unit.id === player.id
-        ? { ...unit, hp, defeated: hp === 0 }
-        : unit.id === enemy.id
-          ? { ...unit, actionUsed }
-          : unit,
+      unit.id === player.id ? damagedPlayer : unit.id === enemy.id ? { ...unit, actionUsed } : unit,
     );
     log.push(
       `${enemy.name} attacks ${player.name}: d20 ${roll} + ${bonus} = ${total} vs AC ${targetAc}. ${
-        hit ? `${damage} damage (${hp}/${player.maxHp} hp).` : "Miss."
+        hit ? `${damage} damage (${damagedPlayer.hp}/${player.maxHp} hp).` : "Miss."
       }`,
     );
   } else {
@@ -654,29 +816,31 @@ export function battleCompanionTurn(state: GameState): GameState | null {
   if (distance(position, target.position) <= 1) {
     const entity = companion.entityId ? state.entities[companion.entityId] : undefined;
     const weapon = entity?.equipment.mainHand ? getItem(entity.equipment.mainHand) : undefined;
-    const bonus =
-      proficiencyBonus(entity?.level ?? 1) +
-      abilityModifier(entity?.attributes.str ?? 10) +
-      highGroundBonus(battle, companion);
+    const bonus = entity ? attackBonus(entity, "str") : proficiencyBonus(1) + abilityModifier(10);
     const roll = rng.d20();
-    const total = roll + bonus;
-    const targetAc = target.ac + coverBonus(battle, target);
+    const total =
+      roll + bonus + highGroundBonus(battle, companion) + conditionValue(companion, "attackBonus");
+    const targetAc = target.ac + coverBonus(battle, target) + conditionValue(target, "acBonus");
     const hit = total >= targetAc;
+    const damageType = String(weapon?.stats.damageType ?? "physical") as DamageType;
     const damage = hit
-      ? rollDice(rng, String(weapon?.stats.damage ?? "1d6"), abilityModifier(entity?.attributes.str ?? 10))
+      ? rollDice(
+          rng,
+          String(weapon?.stats.damage ?? "1d6"),
+          abilityModifier(entity?.attributes.str ?? 10) +
+            (entity ? damageBonus(entity) : 0) +
+            conditionValue(companion, "damageBonus") +
+            conditionValue(target, "damageTakenBonus"),
+        )
       : 0;
-    const hp = Math.max(0, target.hp - damage);
+    const damagedTarget = applyDamage(target, damage, damageType);
 
     units = units.map((unit) =>
-      unit.id === target.id
-        ? { ...unit, hp, defeated: hp === 0 }
-        : unit.id === companion.id
-          ? { ...unit, actionUsed: true }
-          : unit,
+      unit.id === target.id ? damagedTarget : unit.id === companion.id ? { ...unit, actionUsed: true } : unit,
     );
     log.push(
-      `${companion.name} attacks ${target.name}: d20 ${roll} + ${bonus} = ${total} vs AC ${target.ac}. ${
-        hit ? `${damage} damage (${hp}/${target.maxHp} hp).` : "Miss."
+      `${companion.name} attacks ${target.name}: d20 ${roll} + ${bonus} = ${total} vs AC ${targetAc}. ${
+        hit ? `${damage} damage (${damagedTarget.hp}/${target.maxHp} hp).` : "Miss."
       }`,
     );
   } else {
@@ -753,6 +917,9 @@ export function finishBattle(state: GameState): GameState | null {
         [clearedKey]: [...new Set([...cleared, groupId])],
       },
     };
+  }
+  if (battle.status === "victory") {
+    next = awardMilestone(next, 1, "Won a fight on the road.");
   }
   return next;
 }

@@ -34,6 +34,8 @@ import {
   Hourglass,
   LogOut,
   MessageCircle,
+  PanelRightClose,
+  PanelRightOpen,
   Save,
   Search,
   ShoppingBag,
@@ -73,6 +75,8 @@ export function LocalScreen() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingEncounter, setPendingEncounter] = useState<LocalEncounter | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [titleCard, setTitleCard] = useState<string | null>(null);
   const moveRef = useRef<(hex: Hex) => void>(() => undefined);
   const lastStep = useRef(0);
 
@@ -81,6 +85,14 @@ export function LocalScreen() {
     const timer = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    const mapId = campaign?.local?.map.id;
+    if (!mapId) return;
+    setTitleCard(campaign.local?.map.name ?? null);
+    const timer = setTimeout(() => setTitleCard(null), 1800);
+    return () => clearTimeout(timer);
+  }, [campaign?.local?.map.id, campaign?.local?.map.name]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -177,7 +189,7 @@ export function LocalScreen() {
     persist(result.state);
     if (result.encounter) {
       setPendingEncounter(result.encounter);
-      notify(`${result.encounter.name} â€” decide whether to fight or avoid.`, "warn");
+      notify(`${result.encounter.name} — decide whether to fight or avoid.`, "warn");
       return;
     }
     if (localExitAt(result.state, hex)) {
@@ -262,7 +274,7 @@ export function LocalScreen() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <div className="absolute inset-0 right-[360px]">
+      <div className={cn("absolute inset-0", sidebarOpen ? "right-[360px]" : "right-0")}>
         <LocalCanvas
           key={`${map.id}:${local.returnWorldPosition.q},${local.returnWorldPosition.r}`}
           map={map}
@@ -309,7 +321,30 @@ export function LocalScreen() {
           onHover={setHoverHex}
         />
       </div>
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,7,6,0.52),transparent_20%,transparent_72%,rgba(8,7,6,0.58))]" />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,7,6,0.52),transparent_20%,transparent_72%,rgba(8,7,6,0.58))]",
+          sidebarOpen ? "right-[360px]" : "right-0",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_44%,rgba(8,7,6,0.42))]",
+          sidebarOpen ? "right-[360px]" : "right-0",
+        )}
+      />
+
+      {titleCard ? (
+        <div className="pointer-events-none absolute left-1/2 top-24 z-20 -translate-x-1/2 animate-fade-up text-center">
+          <div className="mx-auto h-px w-28 bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+          <div className="mt-2 font-display text-xl tracking-[0.12em] text-parchment drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+            {titleCard}
+          </div>
+          <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-gold/70">
+            {kindLabel(map.kind)}
+          </div>
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute inset-x-4 top-4 flex items-start justify-between gap-4">
         <Panel className="pointer-events-auto flex items-center gap-3 px-3 py-2">
@@ -329,7 +364,7 @@ export function LocalScreen() {
               <span className="chip border-gold/20 text-[9px] text-gold/60">M8</span>
             </div>
             <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
-              {campaign.world.name} Â· {map.width}Ã—{map.height}
+              {campaign.world.name} · {map.width}×{map.height}
             </div>
             {player ? (
               <button
@@ -338,7 +373,7 @@ export function LocalScreen() {
                 onClick={() => setSheetOpen(true)}
               >
                 <UserRound className="size-2.5" />
-                {player.name} Â· HP {player.hp.current}/{player.hp.max} Â· AC {player.ac}
+                {player.name} · HP {player.hp.current}/{player.hp.max} · AC {player.ac}
               </button>
             ) : null}
           </div>
@@ -369,20 +404,35 @@ export function LocalScreen() {
             />
             <div>
               <div className="text-[11px] text-parchment-dim">
-                {campaignSaveState === "saving" ? "Savingâ€¦" : "Local save"}
+                {campaignSaveState === "saving" ? "Saving…" : "Local save"}
               </div>
               <div className="text-[9px] uppercase tracking-[0.12em] text-faint">autosave</div>
             </div>
           </div>
+          <div className="h-8 w-px bg-line-soft" />
+          <button
+            type="button"
+            className="btn btn-ghost px-1.5! py-1!"
+            onClick={() => setSidebarOpen((open) => !open)}
+            title={sidebarOpen ? "Hide location panel" : "Show location panel"}
+            aria-label={sidebarOpen ? "Hide location panel" : "Show location panel"}
+          >
+            {sidebarOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+          </button>
         </Panel>
       </div>
 
-      <div className="absolute bottom-4 left-4 right-[368px] flex items-end justify-between gap-4">
+      <div
+        className={cn(
+          "absolute bottom-4 left-4 flex items-end justify-between gap-4",
+          sidebarOpen ? "right-[368px]" : "right-4",
+        )}
+      >
         <Panel className="pointer-events-auto min-w-0 max-w-xl px-3 py-2">
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <Footprints className="size-3.5 text-gold/60" />
             <span>
-              WASD/QE walk Â· click a hex Â· scroll to zoom Â·{" "}
+              WASD/QE walk · click a hex · scroll to zoom ·{" "}
               {extra ? `${extra.name} under cursor` : "inspect the town"}
             </span>
           </div>
@@ -410,7 +460,12 @@ export function LocalScreen() {
         </div>
       </div>
 
-      <aside className="absolute bottom-4 right-4 top-[76px] flex w-[344px] flex-col gap-3 overflow-y-auto pr-1">
+      <aside
+        className={cn(
+          "absolute bottom-4 right-4 top-[76px] w-[344px] flex-col gap-3 overflow-y-auto pr-1",
+          sidebarOpen ? "flex" : "hidden",
+        )}
+      >
         {pendingEncounter ? (
           <Panel className="border-gold/45 p-4">
             <div className="flex items-center gap-2">
@@ -521,7 +576,7 @@ export function LocalScreen() {
                   aria-label={`Rest at ${selectedBuilding.name}`}
                 >
                   <BedDouble className="size-3.5" />
-                  Rest Â· 1 gp
+                  Rest · 1 gp
                 </button>
               ) : null}
             </div>

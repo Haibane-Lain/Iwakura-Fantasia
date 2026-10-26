@@ -1,7 +1,7 @@
 # Iwakura Fantasia — Master Plan
 
-**Status:** All milestones M0-M8 complete; Travel Map, vertical slice, installer, and live provider verified
-**Last updated:** 2026-10-24
+**Status:** Milestones M0-M9 complete; M10A exploration art pass complete; Travel Map, vertical slice, installer, live provider, and character-depth pass verified
+**Last updated:** 2026-10-26
 **Target:** Windows desktop, single-player, Electron
 **Repository:** `C:\Coding\Iwakura Fantasia`
 
@@ -927,25 +927,28 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 ### M2 — Character and content
 
 - [x] Content validation tests and Vite HMR for in-repo TS content. External world-pack hot reload is deferred.
-- [x] Ancestries: Human, Elf, Dwarf, with bonuses, traits, granted skills, and extra skill choices.
-- [x] Classes: Fighter, Rogue, Wizard, with hit die, saves, Focus, skill choices, and starting kits.
-- [x] Backgrounds: Soldier, Scholar, Outlander, with skills, hooks, and starting items.
-- [x] Character creation wizard + live derived preview.
+- [x] Ancestries: Human, Elf, Dwarf, Orc, Beastkin, Halfling, each with two heritages, typed traits, granted skills, and extra skill choices.
+- [x] Classes: Fighter, Rogue, Wizard, Cleric, Ranger, Warlock, with hit die, saves, Focus, skill choices, specialties, starting kits, subclasses, and talent trees.
+- [x] Backgrounds: Soldier, Scholar, Outlander, Criminal, Acolyte, Merchant, Noble, with skills, tools/languages, hooks, and starting items.
+- [x] Character creation wizard + live derived preview, heritage, specialty, kit, expertise, tools/languages, starting talent, and manual rolled-stat assignment.
 - [x] Inventory, equipment, character sheet, and equip/unequip actions.
-- [x] Skills/checks UI with deterministic rolls that advance the campaign RNG.
-- [x] Procedural portrait and sigil from a seed/palette.
+- [x] Skills/checks UI with deterministic rolls that advance the campaign RNG, DC/advantage modes, expertise, and passive scores.
+- [x] Procedural portrait and sigil from a seed/palette, with ancestry/heritage features.
 
 **Exit:** create a character, equip gear, see correct stats. Achieved in the E2E.
 
 **M2 notes:**
-- Attribute modes: 27-point buy, standard array assignment, and rolled 4d6-drop-lowest auto-assigned by class priority.
-- Class skill choices exclude skills already granted by background or ancestry. Human gets one extra skill choice.
-- The starting kit combines background and class items, deduplicates them, and auto-equips the first weapon and armor.
-- AC derives from armor type and Dexterity; HP from class hit die and Constitution; Focus from class base plus the best primary attribute modifier.
-- The character sheet supports Overview, Inventory, and Skills tabs, equip/unequip, and per-skill d20 rolls. Rolls persist the updated RNG cursor with the campaign.
-- Portraits and sigils are pure SVG, seeded by the character appearance, so there is no external art dependency.
-- Old M1 saves load fine: new entity fields have schema defaults and the sheet supplies a fallback appearance.
-- Not yet implemented: subclasses, feats, level-up UI, tool proficiencies, expertise, and manual rolled-stat assignment.
+- Attribute modes: 27-point buy, standard array assignment, and rolled 4d6-drop-lowest with manual assignment and re-roll.
+- Class skill choices exclude skills already granted by background or ancestry. Human gets one extra skill choice; Rogue chooses two expertise skills.
+- The starting kit combines background and chosen class kit items, deduplicates them, and auto-equips the best weapon, armor, and shield.
+- AC derives from armor type, Dexterity, and passive effects; HP from class hit die, Constitution, level, and effects; Focus from class base plus the best primary attribute modifier and level gain.
+- The character sheet supports Overview, Path, Talents, Inventory, and Skills tabs, equip/unequip, level-up, talent spending, respec, passive scores, DC/advantage rolls, expertise, tools, and languages. Rolls persist the updated RNG cursor with the campaign.
+- Progression is milestone-based from level 1 to 10. Subclass choice lands at level 3; ASI or feat choices land at levels 4, 8, and 10; every level grants a talent point.
+- Each class has a 9-node, three-branch talent tree with level and prerequisite gates. Subclasses add features at levels 3, 6, and 10.
+- Typed ability effects now cover damage, healing, temporary HP, conditions, movement, resources, and cleansing; battle resolves content instead of branching on ability IDs.
+- Portraits and sigils are pure SVG, seeded by character appearance, ancestry, and heritage, so there is no external art dependency.
+- Old M1/M2 saves load through schema defaults and `normalizeGameState`, which repairs missing talent points and derived fields.
+- Not yet implemented: multiclassing, level 11+, Bard/Paladin, additional heritages/backgrounds, ability cooldowns, and reactions/opportunity attacks.
 
 ### M3 — Towns, NPCs, quests
 
@@ -1083,6 +1086,54 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Graphics quality and weather are persisted settings. The high preset adds a camera colour-grade/vignette filter and denser decorative props; low disables decorative clutter and reduces weather/water motion.
 - Actors use runtime vector rigs rather than shipped sprites. Appearance resolves ancestry, class, equipment, NPC role, and enemy tags into humanoid, wolf, or spirit silhouettes. Eight screen directions drive front/side/back poses while the saved travel facing remains six-direction.
 - Travel and local scenes now maintain persistent actor views keyed by ID, so idle, walk/run, talk, alert, attack, cast, guard, hurt, and defeat poses survive React updates. Battle state remains authoritative; hit/death feedback and action cues are visual only.
+
+### M9 — Character depth
+
+- [x] Typed feature and ability effects shared by ancestries, heritages, class features, subclasses, talents, and feats.
+- [x] Six ancestries with two heritages each: Human, Elf, Dwarf, Orc, Beastkin, Halfling.
+- [x] Six classes: Fighter, Rogue, Wizard, Cleric, Ranger, Warlock, with specialties and starting-kit choices.
+- [x] Seven backgrounds with skills, tools, languages, origin effects, and hooks.
+- [x] Milestone progression from level 1 to 10, subclass at 3, ASI/feat at 4/8/10, and a level-up Path panel.
+- [x] One 9-node, three-branch talent tree per class, with 1 talent point per level, prerequisites, ability grants, passives, and paid respec.
+- [x] Creation wizard v2: heritages, specialties, kits, manual rolled-stat assignment, expertise, tools/languages, starting talent, and ancestry-aware portraits.
+- [x] Character sheet v2: Path and Talents tabs, passive scores, DC/advantage rolls, expertise, tools, languages, and resistances.
+- [x] Data-driven battle effects: damage, healing, temporary HP, conditions with durations, movement, resources, cleansing, support targeting, and action/bonus action tracking.
+- [x] Old-save normalization for progression fields and derived character values.
+- [x] Content validation, progression/talent/battle tests, and updated Electron E2E.
+
+**Exit:** create a character with a heritage, specialty, kit, expertise, and starting talent; reach level 4 through milestones; choose a subclass and feat; spend talent points; and use a talent-granted ability in battle. Achieved in engine tests and the Electron E2E (creation, quest milestone, level 2). Deeper level/subclass choices are covered by engine tests.
+
+**M9 notes:**
+- The full content target of 8 classes and 6 ancestries is partially met: 6 classes and 6 ancestries ship now. Bard, Paladin, additional heritages, and additional backgrounds remain future content.
+- Ability cooldowns, reactions/opportunity attacks, ability loadouts, and higher-level subclass tiers are deferred.
+- Talent respec costs 25 gp and clears all spent nodes; subclass and feat choices are permanent.
+
+### M10 — Graphics refinement
+
+**M10A — Exploration art pass (complete)**
+
+- [x] Hide hex borders in free exploration and reserve the tactical grid for combat.
+- [x] Replace ladder-pattern road ribbons with continuous organic dirt roads and grassy shoulders.
+- [x] Replace repeating plaza brickwork with irregular, worn cobbles.
+- [x] Add atmospheric screen-space backdrops for wilderness, towns, and dungeons.
+- [x] Add contact shadows under buildings and improved actor grounding.
+- [x] Add location title cards on field and local map entry.
+- [x] Make the field/location side panel collapsible and widen the map when hidden.
+- [x] Bring the exploration camera closer and clamp it to the map framing.
+- [x] Add combat-only health bars, floating damage numbers, and a battle camera focused on the combatants.
+- [x] Lighten atlas fog and move the world map away from a flat black background.
+- [x] Refresh travel, town, battle, and atlas screenshots.
+
+**M10 notes:**
+- The visual direction is "illuminated isometric field journal": continue the current procedural Canvas texture pipeline and add authored SVG for UI ornament, portraits, and key illustrations.
+- The tactical grid remains an explicit overlay rendered only by battle scenes; it is no longer baked into terrain textures.
+- Terrain textures, props, actors, weather, and atmosphere remain deterministic and independent of gameplay RNG.
+- Next graphics phases:
+  - M10B — terrain autotile/decal layer for coast, forest, field, cliff, and road edges.
+  - M10C — canopy/roof occlusion, richer gatehouses, chimneys, banners, smoke, and town outskirts.
+  - M10D — combat target telegraphs, turn banners, initiative portraits, and projectile/impact VFX.
+  - M10E — portrait generator v2, class/ancestry gear detail, and NPC role props.
+  - M10F — parchment atlas, compass/scale, field-journal panels, larger type, and visual-regression baselines.
 
 ---
 

@@ -200,55 +200,89 @@ function paintDirt(context: CanvasRenderingContext2D, rng: () => number, color: 
 }
 
 function paintRoadGround(context: CanvasRenderingContext2D, rng: () => number, color: number): void {
-  paintDirt(context, rng, shade(color, -8));
-  context.globalAlpha = 0.22;
-  context.strokeStyle = css(shade(color, -38));
-  context.lineWidth = 3;
-  for (const offset of [0.28, 0.72]) {
-    context.beginPath();
-    const x = TILE_SIZE * offset;
-    context.moveTo(x, 0);
-    context.bezierCurveTo(x + 5, TILE_SIZE * 0.32, x - 4, TILE_SIZE * 0.68, x + 3, TILE_SIZE);
-    context.stroke();
-  }
-  context.globalAlpha = 1;
-  for (let index = 0; index < 28; index += 1) {
+  // The road *ribbon* carries the visible dirt surface. Keeping the underlying
+  // hex mostly grassy prevents hex-shaped brown bands from leaking outside the
+  // curved ribbon and turning the road into a ladder of tiles.
+  paintGrass(context, rng, 0x4d5c3d);
+
+  for (let index = 0; index < 4; index += 1) {
     const x = rng() * TILE_SIZE;
     const y = rng() * TILE_SIZE;
-    const size = 1 + rng() * 2.2;
-    context.globalAlpha = 0.2 + rng() * 0.25;
-    context.fillStyle = css(rng() > 0.4 ? shade(color, 34) : shade(color, -34));
+    const width = 18 + rng() * 38;
+    context.globalAlpha = 0.05 + rng() * 0.06;
+    context.fillStyle = css(shade(color, -24));
     context.beginPath();
-    context.ellipse(x, y, size, size * 0.6, rng() * Math.PI, 0, Math.PI * 2);
+    context.ellipse(x, y, width, width * (0.2 + rng() * 0.16), rng() * Math.PI, 0, Math.PI * 2);
     context.fill();
   }
+  fillNoise(context, rng, [shade(color, 20), shade(color, -30)], 120, 1.6, 0.12);
   context.globalAlpha = 1;
 }
 
 function paintCobbles(context: CanvasRenderingContext2D, rng: () => number, color: number): void {
-  context.fillStyle = css(shade(color, -16));
+  context.fillStyle = css(shade(color, -30));
   context.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-  const rowHeight = 18;
-  for (let row = -1; row < TILE_SIZE / rowHeight + 1; row += 1) {
-    const offset = row % 2 === 0 ? 0 : 12;
-    for (let col = -1; col < TILE_SIZE / 26 + 1; col += 1) {
-      const x = col * 26 + offset + rng() * 3;
-      const y = row * rowHeight + rng() * 2;
-      const width = 21 + rng() * 4;
-      const height = 14 + rng() * 3;
-      context.fillStyle = css(shade(color, -8 + rng() * 24));
-      context.beginPath();
-      context.roundRect(x, y, width, height, 3);
-      context.fill();
-      context.globalAlpha = 0.28;
-      context.fillStyle = css(shade(color, 36));
-      context.beginPath();
-      context.roundRect(x + 1.5, y + 1, width - 3, 2, 1);
-      context.fill();
-      context.globalAlpha = 1;
-    }
+  paintDirt(context, rng, shade(color, -18));
+
+  // Irregular, individually worn stones. A strict brick grid makes the plaza
+  // read like a repeating texture instead of a place people walk through.
+  for (let index = 0; index < 68; index += 1) {
+    const x = rng() * TILE_SIZE;
+    const y = rng() * TILE_SIZE;
+    const width = 18 + rng() * 25;
+    const height = 12 + rng() * 17;
+    const rotation = (rng() - 0.5) * 0.7;
+    context.save();
+    context.translate(x, y);
+    context.rotate(rotation);
+    context.globalAlpha = 0.72 + rng() * 0.2;
+    context.fillStyle = css(shade(color, -17 + rng() * 38));
+    context.beginPath();
+    context.roundRect(-width / 2, -height / 2, width, height, 2 + rng() * 5);
+    context.fill();
+    context.globalAlpha = 0.3;
+    context.strokeStyle = css(shade(color, -44));
+    context.lineWidth = 1;
+    context.stroke();
+    context.globalAlpha = 0.18 + rng() * 0.14;
+    context.fillStyle = css(shade(color, 42));
+    context.beginPath();
+    context.roundRect(-width / 2 + 2, -height / 2 + 1.5, width - 4, 2, 1);
+    context.fill();
+    context.restore();
   }
-  fillNoise(context, rng, [shade(color, -35), shade(color, 30)], 110, 1.4, 0.25);
+
+  // Worn walking lanes and a little moss between the stones.
+  context.globalAlpha = 0.2;
+  context.fillStyle = css(shade(color, 24));
+  context.beginPath();
+  context.ellipse(
+    TILE_SIZE * 0.5,
+    TILE_SIZE * 0.55,
+    TILE_SIZE * 0.36,
+    TILE_SIZE * 0.16,
+    0.25,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+  for (let index = 0; index < 9; index += 1) {
+    context.globalAlpha = 0.08 + rng() * 0.1;
+    context.fillStyle = css(0x53623f);
+    context.beginPath();
+    context.ellipse(
+      rng() * TILE_SIZE,
+      rng() * TILE_SIZE,
+      6 + rng() * 20,
+      2 + rng() * 7,
+      rng() * Math.PI,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+  context.globalAlpha = 1;
+  fillNoise(context, rng, [shade(color, -35), shade(color, 30)], 130, 1.4, 0.24);
 }
 
 function paintRoof(context: CanvasRenderingContext2D, rng: () => number, color: number): void {
@@ -525,26 +559,14 @@ export function tileTexture(tileId: string, color: number, variant = 0): Texture
     const rng = mulberry32(hashString(`iso-tile:${tileId}:${color}:${index}`));
     paintTileBase(context, tileId, color, rng);
 
-    // A soft top-left light and a darkened rim make flat hexes read as raised
-    // surfaces even when the tile itself has no height.
+    // A soft top-left light keeps the tile material alive without drawing a
+    // hard dark rim around every hex. Tactical grids are rendered explicitly
+    // by the combat scene instead of living in the terrain texture.
     const light = context.createLinearGradient(0, 0, TILE_SIZE, TILE_SIZE);
-    light.addColorStop(0, "rgba(255, 246, 224, 0.08)");
+    light.addColorStop(0, "rgba(255, 246, 224, 0.07)");
     light.addColorStop(0.5, "rgba(255, 255, 255, 0)");
-    light.addColorStop(1, "rgba(0, 0, 0, 0.12)");
+    light.addColorStop(1, "rgba(0, 0, 0, 0.045)");
     context.fillStyle = light;
-    context.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
-
-    const rim = context.createRadialGradient(
-      TILE_SIZE / 2,
-      TILE_SIZE / 2,
-      TILE_SIZE * 0.2,
-      TILE_SIZE / 2,
-      TILE_SIZE / 2,
-      TILE_SIZE * 0.72,
-    );
-    rim.addColorStop(0, "rgba(0, 0, 0, 0)");
-    rim.addColorStop(1, "rgba(0, 0, 0, 0.15)");
-    context.fillStyle = rim;
     context.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
 
     variants.push(textureFrom(context));
@@ -1207,50 +1229,54 @@ export function ribbonTexture(kind: "road" | "water" | "path", color: number): T
 
   if (kind === "road") {
     const gradient = context.createLinearGradient(0, 0, width, 0);
-    gradient.addColorStop(0, css(shade(color, -25), 0));
-    gradient.addColorStop(0.18, css(shade(color, -18), 0.82));
-    gradient.addColorStop(0.5, css(color, 0.98));
-    gradient.addColorStop(0.82, css(shade(color, -18), 0.82));
-    gradient.addColorStop(1, css(shade(color, -25), 0));
+    gradient.addColorStop(0, css(shade(color, -30), 0));
+    gradient.addColorStop(0.1, css(shade(color, -20), 0.62));
+    gradient.addColorStop(0.32, css(color, 0.95));
+    gradient.addColorStop(0.68, css(color, 0.95));
+    gradient.addColorStop(0.9, css(shade(color, -20), 0.62));
+    gradient.addColorStop(1, css(shade(color, -30), 0));
     context.fillStyle = gradient;
     context.fillRect(0, 0, width, height);
-    fillNoise(context, rng, [shade(color, 24), shade(color, -30)], 160, 2, 0.25);
-    // Two worn wheel ruts and a lighter crown.
-    for (const rut of [0.34, 0.66]) {
-      context.globalAlpha = 0.2;
-      context.strokeStyle = css(shade(color, -46));
-      context.lineWidth = 3.4;
-      context.beginPath();
-      const x = width * rut;
-      context.moveTo(x, 0);
-      context.bezierCurveTo(x + 3, height * 0.3, x - 3, height * 0.7, x + 1, height);
-      context.stroke();
-      context.globalAlpha = 1;
-    }
-    context.globalAlpha = 0.18;
-    context.fillStyle = css(shade(color, 42));
-    context.fillRect(width * 0.47, 0, width * 0.06, height);
-    context.globalAlpha = 1;
-    for (let index = 0; index < 28; index += 1) {
-      const x = width * 0.16 + rng() * width * 0.68;
+
+    // The road reads as trodden earth: low-frequency mottling, a few broad
+    // wheel tracks and loose stones. No periodic crossbars, so adjacent ribbon
+    // segments cannot turn into a ladder.
+    for (let index = 0; index < 13; index += 1) {
+      const x = width * (0.16 + rng() * 0.68);
       const y = rng() * height;
-      const size = 0.8 + rng() * 2.2;
-      context.globalAlpha = 0.2 + rng() * 0.26;
-      context.fillStyle = css(rng() > 0.4 ? shade(color, 34) : shade(color, -38));
+      context.globalAlpha = 0.05 + rng() * 0.08;
+      context.fillStyle = css(rng() > 0.5 ? shade(color, 30) : shade(color, -34));
       context.beginPath();
-      context.ellipse(x, y, size, size * 0.6, rng() * Math.PI, 0, Math.PI * 2);
+      context.ellipse(x, y, 5 + rng() * 15, 5 + rng() * 16, rng() * Math.PI, 0, Math.PI * 2);
       context.fill();
-      context.globalAlpha = 1;
     }
-    for (let index = 0; index < 8; index += 1) {
-      const x = width * 0.2 + rng() * width * 0.6;
-      context.globalAlpha = 0.13 + rng() * 0.13;
-      context.strokeStyle = css(shade(color, -48));
-      context.lineWidth = 1;
+    context.globalAlpha = 1;
+
+    for (const rut of [0.31, 0.69]) {
+      const x = width * rut;
+      context.globalAlpha = 0.14;
+      context.strokeStyle = css(shade(color, -44));
+      context.lineWidth = 3.2;
       context.beginPath();
       context.moveTo(x, 0);
-      context.lineTo(x + (rng() - 0.5) * 6, height);
+      context.bezierCurveTo(x + 2, height * 0.28, x - 2, height * 0.64, x + 1, height);
       context.stroke();
+      context.globalAlpha = 1;
+    }
+    context.globalAlpha = 0.12;
+    context.fillStyle = css(shade(color, 44));
+    context.fillRect(width * 0.46, 0, width * 0.08, height);
+    context.globalAlpha = 1;
+
+    for (let index = 0; index < 34; index += 1) {
+      const x = width * 0.14 + rng() * width * 0.72;
+      const y = rng() * height;
+      const size = 0.7 + rng() * 2;
+      context.globalAlpha = 0.16 + rng() * 0.22;
+      context.fillStyle = css(rng() > 0.4 ? shade(color, 36) : shade(color, -40));
+      context.beginPath();
+      context.ellipse(x, y, size, size * 0.55, rng() * Math.PI, 0, Math.PI * 2);
+      context.fill();
       context.globalAlpha = 1;
     }
   } else if (kind === "water") {

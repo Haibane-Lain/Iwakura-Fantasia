@@ -66,7 +66,7 @@ function cornerUv(corner: number, size: number): UvPoint {
  * Add a hex top surface at the given world height. `inset` pulls the top face
  * inwards a fraction of a world unit to avoid hairline seams between tiles.
  */
-export function addHexTop(builder: MeshBuilder, hex: Hex, size: number, z: number, inset = 0.5): void {
+export function addHexTop(builder: MeshBuilder, hex: Hex, size: number, z: number, inset = 0.08): void {
   const points = projectHexCorners(hex, size, z, inset);
   const centerWorld = hexToPixel(hex, size);
   const center = projectPoint(centerWorld, z);
@@ -107,7 +107,7 @@ export function addFlatHexTop(builder: MeshBuilder, hex: Hex, size: number, inse
 }
 
 /** Add the visible vertical skirt under a raised hex top. */
-export function addHexSides(builder: MeshBuilder, hex: Hex, size: number, z: number, inset = 0.5): void {
+export function addHexSides(builder: MeshBuilder, hex: Hex, size: number, z: number, inset = 0.08): void {
   if (z <= 0) return;
   const top = projectHexCorners(hex, size, z, inset);
   const bottom = projectHexCorners(hex, size, 0, inset);

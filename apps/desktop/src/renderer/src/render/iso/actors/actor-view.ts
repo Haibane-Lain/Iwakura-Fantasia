@@ -1,4 +1,4 @@
-﻿import { Container, Graphics } from "pixi.js";
+﻿import { Container, Graphics, Text } from "pixi.js";
 import type { GraphicsQuality } from "../weather";
 import {
   type ActorActionKind,
@@ -72,6 +72,19 @@ export class ActorView {
   private readonly ring = new Graphics();
   private readonly body: Container;
   private readonly fx = new Graphics();
+  private readonly healthBar = new Graphics();
+  private readonly damageLabel = new Text({
+    text: "",
+    style: {
+      fontFamily: "Palatino Linotype, Georgia, serif",
+      fontSize: 13,
+      fontWeight: "700",
+      fill: 0xffe0a3,
+      stroke: { color: 0x080706, width: 3 },
+    },
+  });
+  private damageRemaining = 0;
+  private damageDuration = 1;
   private readonly parts: ActorRigParts;
   private readonly appearance: ActorAppearance;
   private readonly phase: number;
@@ -92,7 +105,9 @@ export class ActorView {
     this.body = this.parts.body;
     this.body.addChild(this.fx);
 
-    this.container.addChild(this.shadow, this.ring, this.body);
+    this.damageLabel.anchor.set(0.5);
+    this.damageLabel.visible = false;
+    this.container.addChild(this.shadow, this.ring, this.body, this.healthBar, this.damageLabel);
     this.drawShadow();
     this.update(0, false, "balanced");
   }
@@ -137,6 +152,15 @@ export class ActorView {
 
   get footprintRadius(): number {
     return this.appearance.body === "wolf" ? 15 : this.appearance.body === "shade" ? 11 : 11;
+  }
+
+  showDamage(amount: number): void {
+    if (amount <= 0 || this.presentation.defeated) return;
+    this.damageLabel.text = `-${Math.round(amount)}`;
+    this.damageRemaining = 1;
+    this.damageDuration = 1;
+    this.damageLabel.visible = true;
+    this.damageLabel.alpha = 1;
   }
 
   playCue(kind: ActorVisualCueKind, facing?: ActorFacing): void {
@@ -192,7 +216,9 @@ export class ActorView {
     this.body.alpha = 1;
     this.fx.clear();
     this.ring.clear();
+    this.healthBar.clear();
     this.drawRing();
+    this.drawHealthBar();
 
     const mirror = facingIsLeft(this.facing) ? -1 : 1;
     const side = facingIsSide(this.facing) ? 0.9 : 1;
@@ -267,6 +293,17 @@ export class ActorView {
     this.body.scale.set(baseScale, scaleY);
     this.body.alpha = alpha;
     this.drawActorFx(pose, actionProgress, reduceMotion, quality, this.parts.kind);
+
+    if (this.damageRemaining > 0) {
+      this.damageRemaining = Math.max(0, this.damageRemaining - dt / this.damageDuration);
+      const progress = 1 - this.damageRemaining;
+      this.damageLabel.position.set(0, -48 - progress * 16);
+      this.damageLabel.alpha = this.damageRemaining;
+      this.damageLabel.scale.set(1 + (1 - this.damageRemaining) * 0.08);
+      this.damageLabel.visible = true;
+    } else {
+      this.damageLabel.visible = false;
+    }
   }
 
   destroy(): void {
@@ -281,6 +318,23 @@ export class ActorView {
   private drawShadow(): void {
     const radius = this.appearance.body === "wolf" ? 14 : 10.5;
     this.shadow.ellipse(0, 1, radius, radius * 0.38).fill({ color: 0x080706, alpha: 0.42 });
+  }
+
+  private drawHealthBar(): void {
+    const ratio = this.presentation.hpRatio;
+    if (ratio === undefined || this.presentation.defeated) return;
+    const width = this.appearance.body === "wolf" ? 28 : 24;
+    const y = 8;
+    const teamColor = this.presentation.team === "enemy" ? 0xb45a4f : 0x9fb37a;
+    this.healthBar.roundRect(-width / 2 - 1, y - 1, width + 2, 5, 2).fill({ color: 0x080706, alpha: 0.62 });
+    if (ratio > 0) {
+      this.healthBar
+        .roundRect(-width / 2, y, width * clamp01(ratio), 3, 1.5)
+        .fill({ color: teamColor, alpha: 0.95 });
+    }
+    this.healthBar
+      .roundRect(-width / 2 - 1, y - 1, width + 2, 5, 2)
+      .stroke({ color: 0x080706, width: 0.7, alpha: 0.55 });
   }
 
   private drawRing(): void {

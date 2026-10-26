@@ -10,6 +10,7 @@ import {
 import type { ActorAppearanceInput, ActorFacing } from "../render/iso/actors/actor-types";
 import { ActorView } from "../render/iso/actors/actor-view";
 import { AtmosphereFilter } from "../render/iso/atmosphere";
+import { drawBackdrop } from "../render/iso/backdrop";
 import { addGatehouse } from "../render/iso/buildings";
 import { followIsoCamera, screenToWorld } from "../render/iso/camera";
 import { IsoLabelLayer, makeLabel } from "../render/iso/labels";
@@ -95,6 +96,7 @@ function nearestFacing(dx: number, dy: number): number {
 
 export class TravelRenderer {
   private readonly camera = new Container();
+  private readonly backdrop = new Graphics();
   private readonly terrainLayer = new Container();
   private readonly decalLayer = new Container();
   private readonly overlayLayer = new Graphics();
@@ -117,7 +119,7 @@ export class TravelRenderer {
   private playerPixel: Point;
   private readonly mapBounds: ReturnType<typeof mapIsoBounds>;
   private playerHex: Hex;
-  private scale = 1;
+  private scale = 1.18;
   private hoverHex: Hex | null = null;
   private paused = false;
   private lastFacing = 0;
@@ -164,7 +166,8 @@ export class TravelRenderer {
     this.lastFacing = partyFacing;
 
     this.objectLayer.sortableChildren = true;
-    this.app.stage.addChild(this.camera);
+    this.app.stage.addChild(this.backdrop, this.camera);
+    drawBackdrop(this.app, this.backdrop, "wilderness", hour);
     this.camera.addChild(
       this.terrainLayer,
       this.decalLayer,
@@ -216,6 +219,7 @@ export class TravelRenderer {
 
   setHour(hour: number): void {
     this.hour = hour;
+    drawBackdrop(this.app, this.backdrop, "wilderness", hour);
     this.drawTint();
     this.weather.setWeather(this.weatherSetting, this.map.id, hour, this.weatherSeed, false);
   }
@@ -254,7 +258,7 @@ export class TravelRenderer {
         corners.flatMap((point) => [point.x, point.y]),
         true,
       )
-      .fill({ color: 0x050504, alpha: 0.48 });
+      .fill({ color: 0x0a0f09, alpha: 0.66 });
     this.terrainLayer.addChild(background);
 
     const topGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
@@ -329,8 +333,11 @@ export class TravelRenderer {
     for (const segment of roadSegments(this.map)) {
       const center = projectHex(segment.from, HEX_SIZE, 0.04);
       const target = projectHex(segment.to, HEX_SIZE, 0.04);
-      addOrganicRibbon(roadShadow, center, target, { width: 14.5 });
-      addOrganicRibbon(segment.bridge ? bridgeSurface : roadSurface, center, target, { width: 11 });
+      addOrganicRibbon(roadShadow, center, target, { width: 22, repeat: 1 });
+      addOrganicRibbon(segment.bridge ? bridgeSurface : roadSurface, center, target, {
+        width: 18,
+        repeat: 1,
+      });
     }
     for (const segment of waterSegments(this.map)) {
       addOrganicRibbon(
@@ -426,6 +433,16 @@ export class TravelRenderer {
               this.windSprites.push(flower);
             }
           }
+        } else if (tileId === "road" && this.graphicsQuality !== "low" && seed % 4 === 0) {
+          const edge = (seed % 2 === 0 ? 1 : -1) * (9 + (seed % 5));
+          const tuft = addProp(
+            this.objectLayer,
+            "tuft",
+            { x: base.x + edge, y: base.y + (seed % 7) - 3 },
+            { scale: 0.14 + (seed % 6) / 100, variant: seed % 3 },
+          );
+          tuft.zIndex = base.y;
+          this.windSprites.push(tuft);
         } else if (tileId === "field" || tileId === "crop") {
           if (this.graphicsQuality !== "low" && seed % 3 === 0) {
             const sprite = addProp(
@@ -806,6 +823,7 @@ export class TravelRenderer {
 
   handleResize(): void {
     this.app.stage.hitArea = new Rectangle(0, 0, this.app.screen.width, this.app.screen.height);
+    drawBackdrop(this.app, this.backdrop, "wilderness", this.hour);
     this.weather.resize();
     this.focusCamera();
   }

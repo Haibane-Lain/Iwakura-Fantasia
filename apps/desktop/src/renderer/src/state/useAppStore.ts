@@ -7,6 +7,7 @@ import type {
   WorldGenParams,
   WorldGenResult,
 } from "@iwakura/contracts";
+import { normalizeGameState } from "@iwakura/engine";
 import { create } from "zustand";
 import { ApiClient } from "../api/client";
 
@@ -95,6 +96,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         (requestedScreen === "character" && !get().pendingWorld)
           ? "campaign"
           : requestedScreen;
+      const campaign = saved.campaign ? normalizeGameState(saved.campaign) : null;
       set({
         api,
         bootstrap,
@@ -102,12 +104,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
         settings,
         models: models.models,
         modelsSource: models.source,
-        campaign: saved.campaign,
+        campaign,
         campaignUpdatedAt: saved.updatedAt,
         loading: false,
         bootError: null,
         screen: initialScreen,
-        worldMode: saved.campaign?.travel ? "travel" : "atlas",
+        worldMode: campaign?.travel ? "travel" : "atlas",
       });
     } catch (error) {
       set({
@@ -140,13 +142,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   applySettings: (settings) => set({ settings }),
 
-  setCampaign: (campaign) =>
+  setCampaign: (campaign) => {
+    const next = normalizeGameState(campaign);
     set({
-      campaign,
-      campaignUpdatedAt: campaign.campaign.updatedAt,
+      campaign: next,
+      campaignUpdatedAt: next.campaign.updatedAt,
       campaignSaveState: "idle",
-      worldMode: campaign.travel ? "travel" : "atlas",
-    }),
+      worldMode: next.travel ? "travel" : "atlas",
+    });
+  },
 
   saveCampaign: async (campaign) => {
     const api = get().api;

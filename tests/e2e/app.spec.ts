@@ -50,6 +50,8 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
     await window.getByRole("button", { name: "Next" }).click();
     await window.getByRole("button", { name: "Next" }).click();
     await window.getByRole("button", { name: "Next" }).click();
+    await window.getByRole("button", { name: /Shield Bash/ }).click();
+    await window.getByRole("button", { name: "Next" }).click();
     await window.getByRole("button", { name: "Next" }).click();
     await window.locator("#character-name").fill("Ardan Vell");
     await window.getByRole("button", { name: "Next" }).click();
@@ -186,6 +188,14 @@ test("creates a character, explores Redford and the crypt, trades, and finishes 
     await window.getByRole("button", { name: "Journal" }).click();
     await window.getByRole("button", { name: "Completed" }).click();
     await expect(window.getByText("The Mill That Stopped").first()).toBeVisible();
+    await window.getByRole("button", { name: "Close", exact: true }).click();
+
+    // Quest completion awards a milestone. Spend it on the Path tab.
+    await window.getByRole("button", { name: "Character" }).click();
+    await window.getByRole("button", { name: "Path", exact: true }).click();
+    await expect(window.getByText(/Level 1 → 2/)).toBeVisible();
+    await window.getByRole("button", { name: "Advance to level 2" }).click();
+    await expect(window.getByText("level 2").first()).toBeVisible();
     await window.getByRole("button", { name: "Close", exact: true }).click();
 
     // Save the local state and verify that Continue restores it.

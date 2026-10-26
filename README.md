@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** All milestones M0–M8 complete, plus the isometric field-art, atmosphere, and actor-rig pass. Travel Map, vertical slice, installer, and live OpenCode Go verified.
+**Status:** All milestones M0–M8 complete, plus the isometric field-art, atmosphere, actor-rig, exploration-art, and character-depth passes. Travel Map, vertical slice, installer, and live OpenCode Go verified.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md) · **Acceptance:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
@@ -33,24 +33,29 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Shader atmosphere**: a camera-level colour-grade/vignette filter, animated water texture matrices, and quality-scaled weather layers. Low, Balanced, and High presets trade effects for performance.
 - **Organic crossings**: walk through a road edge to enter the neighbouring world hex, or through a settlement gate to load its town map. Town maps accept camera-relative WASD/QE or click movement; leaving returns to the same gate.
 - **Seamless combat**: visible enemy groups auto-aggro and turn the current field into an isometric battle map; victory, retreat, and defeat return to the field.
+- **Exploration art pass**: terrain reads as a continuous landscape rather than a hex board; exploration hides the grid, roads use continuous dirt ribbons, plazas use irregular worn stones, buildings cast contact shadows, and map edges blend into biome backdrops.
+- **Combat readability**: tactical grids appear only in battle, units carry health bars, hit cues show floating damage, and the camera frames the whole skirmish.
+- **Map framing**: location title cards, collapsible field panels, wider camera framing, and time-of-day backdrops keep the world in view.
 - **World time and campaign saves**: travel advances the clock, reveals fog, discovers landmarks, and persists through SQLite.
-- **Character creation wizard**: 3 ancestries, 3 classes, 3 backgrounds, point buy, standard array, rolled 4d6 stats, class/background skill choices, appearance, portrait, sigil, name, and pronouns.
-- **Derived character rules**: ancestry bonuses, HP, AC, Focus, speed, proficiency, saves, skills, starting kit, auto-equipped weapon and armor.
-- **Character sheet** with Overview, Inventory, and Skills tabs, equip/unequip actions, and deterministic skill rolls that advance the campaign RNG.
-- **Procedural portraits and sigils** generated from a seed and palette, with no external art dependency.
+- **Character creation wizard**: 6 ancestries with 2 heritages each, 6 classes with specialties and starting kits, 7 backgrounds, point buy, standard array, manually assignable rolled 4d6 stats, class/background/ancestry skills, expertise, tools, languages, a starting talent, appearance, portrait, sigil, name, and pronouns.
+- **Derived character rules**: ancestry and heritage bonuses, typed passive traits, HP, AC, Focus, speed, proficiency, saves, skills, expertise, resistances, starting kit, auto-equipped weapon and armor.
+- **Character progression**: milestone levels 1–10, class feature tables, subclass choice at level 3, ASI or feat at levels 4/8/10, and one talent point per level.
+- **Class talent trees**: one 9-node discipline tree per class across three branches, with tier/level prerequisites, ability grants, passive bonuses, and paid respec.
+- **Character sheet** with Overview, Path, Talents, Inventory, and Skills tabs, equip/unequip actions, level-up controls, talent spending, passive scores, DC/advantage skill rolls, and deterministic RNG advancement.
+- **Procedural portraits and sigils** generated from a seed, palette, ancestry, and heritage, with ancestry-specific ears, tusks, horns, beards, and stature. No external art dependency.
 - **Isometric town and dungeon maps** built on the same hex geometry and pathfinding as the world map, with extruded walls, building meshes and roofs, props, screen-space labels, exits, local travel, hover paths, and save/continue inside a location.
 - **NPCs with hourly schedules** across seven authored characters plus a generic road trader fallback for procedural settlements.
 - **Authored dialogue** with quest-state roots, relationship changes, merchants, and a free-speech AI hook that streams an in-character reply from the local gateway.
 - **Merchant trade** with per-campaign stock, buy/sell validation, gold, inventory, and equipped-item protection.
 - **Quest journal and state machine**: accept, reveal targets on the map, progress reach/interact objectives, turn in for gold and items.
 - **The Mill That Stopped** and **The Greywatch Light** authored quests, plus a crypt ledger, dungeon encounter trigger, inn rest, and wait controls.
-- **Isometric battle vertical slice**: initiative order, rounds, movement, melee attacks, class abilities, focus costs, shield/condition handling, simple enemy utility AI, active-unit rings, victory/defeat/retreat, gold rewards, and a saved battle state. Encounter prompts start battles from the road or a dungeon.
+- **Isometric battle vertical slice**: initiative order, rounds, movement, melee attacks, data-driven class and talent abilities, focus costs, action/bonus-action economy, conditions with durations, temporary hit points, support targeting, simple enemy utility AI, active-unit rings, victory/defeat/retreat, gold and milestone rewards, and a saved battle state. Encounter prompts start battles from the road or a dungeon.
 - **Structured NPC AI turns**: a dedicated `/api/ai/npc` endpoint assembles the persona prompt, streams JSON from OpenCode Go, repairs common malformed intents, and validates every intent against the engine before applying disposition, memory, trade, quest, item, or combat changes.
 - **Live AI verified**: a real OpenCode Go turn streamed through the local gateway at 2.2 s and $0.0001, and a live Hessa turn produced a valid AI voice plus engine-applied trust and memory changes.
 - **Director and evolving quests**: validated director operations, procedural work templates, faction/rumor reactions, branching Greywatch outcomes, and a deterministic quest recap.
 - **Companions**: Wren can be recruited, fights on her own turn, comments at camp, tracks approval, can be dismissed, and participates in romance gates.
 - **Save and polish**: three manual save slots, JSON export/import, autosave, keyboard/accessibility pass, field guide, generated audio/VFX, high contrast, reduced motion, custom Windows icon, and NSIS installer.
-- **Tests**: 119 Vitest tests and a Playwright Electron smoke test covering world and character creation, isometric Travel Map entry and screen-relative movement, atlas fast travel, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, deterministic weather selection, actor facing/appearance/state rules, and the non-destructive keystore path.
+- **Tests**: 133 Vitest tests and a Playwright Electron smoke test covering world and character creation, heritages/specialties/talents, subclass and level-up progression, talent spending and respec, expertise and passive scores, data-driven battle abilities, isometric Travel Map entry and screen-relative movement, atlas fast travel, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, deterministic weather selection, actor facing/appearance/state rules, and the non-destructive keystore path.
 - **Packaged Windows build** via electron-builder: 4.6 MB `app.asar`, no native modules. `pnpm package:installer` produces a 112 MB NSIS setup executable with the custom icon.
 
 ![Travel Map](docs/images/travel-map.png)
@@ -114,12 +119,12 @@ Then:
 
 1. Open **New Campaign**.
 2. Choose **Procedural** or **Handcrafted**, generate a world, inspect the report, and press **Choose character**.
-3. Build a character through ancestry, class, background, attributes, skills, appearance, name, and review.
+3. Build a character through ancestry/heritage, class/specialty/kit, background, attributes, proficiencies, starting talent, appearance, name, and review.
 4. Begin the chronicle. Drag to pan, scroll to zoom, and click a hex to travel. The clock, fog, discoveries, and save update automatically.
 5. Walk onto Redford or Millbrook and use **Enter** to switch to the local hex map. Talk to people, trade, rest, wait, and open the **Journal**.
 6. Accept Hessa's quest in Redford, travel to the Old Mill Crypt, recover the ledger, and return to her. The quest reveals the crypt on the world map.
 7. In the crypt, walk into the shade encounter. The ambush panel offers **Fight** or **Avoid**. A battle uses initiative, movement, attacks, abilities, and retreat.
-8. Open the **Character** sheet to inspect stats, equipment, companions, and roll skill checks.
+8. Open the **Character** sheet to inspect stats, path, talents, equipment, and companions, spend level-up choices, and roll skill checks.
 9. Recruit Wren in Millbrook, look for generated work from the **Journal**, and use save slots or export/import in **Settings**.
 10. Open **Settings → OpenCode Go** and paste an API key when you want to use the AI Lab or the dialogue AI hook.
 
@@ -222,11 +227,12 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Current limitations
 
-- Battle is a playable vertical slice: initiative, movement, attacks, class abilities, cover/high ground, LOS, shield, companion AI turns, enemy AI, VFX, victory/defeat/retreat, rewards, and saved state. Full condition durations, manual companion override, damage previews, and richer enemy tactics remain post-slice.
+- Battle is a playable vertical slice: initiative, movement, attacks, data-driven class/talent abilities, cover/high ground, LOS, conditions with durations, temporary HP, companion AI turns, enemy AI, VFX, victory/defeat/retreat, rewards, milestones, and saved state. Ability cooldowns, reactions/opportunity attacks, manual companion override, damage previews, and richer enemy tactics remain post-slice.
 - Battle maps reuse the local hex renderer. Dungeon battles use the current local map; road battles generate an arena from the current terrain.
-- Character progression currently stops at level 1. Subclasses, feats, level-up UI, and level 5+ content are not implemented yet.
-- Standard array is assigned through six selects; rolled stats are auto-assigned by class priority. Drag-and-drop stat assignment and manual rolled assignment are deferred.
-- Class skill choices exclude skills already granted by background or ancestry. There are no expertise or tool proficiencies yet.
+- Character progression runs from level 1 to 10 with subclasses, feats/ASI, talent trees, and level-up UI. Multiclassing, level 11+, and additional subclass tiers are not implemented.
+- Content currently ships 6 ancestries, 6 classes, 7 backgrounds, 12 subclasses, 12 feats, and 6 class talent trees. Bard, Paladin, and further ancestries/backgrounds remain future content.
+- Attributes support point buy, standard array, rolled 4d6 with manual assignment, and re-roll; drag-and-drop assignment and offer/party-wide build presets are deferred.
+- Class skill choices exclude skills already granted by background or ancestry. Expertise, tools, and languages are tracked at creation and on the sheet; tool-specific check automation is still limited.
 - The world map renders textured terrain through batched PixiJS meshes rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
 - The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred.
 - The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.

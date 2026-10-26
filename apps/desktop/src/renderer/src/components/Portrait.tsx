@@ -43,13 +43,30 @@ function Sigil({ id, color }: { id: string; color: string }) {
   }
 }
 
-export function Portrait({ appearance, className }: { appearance: CharacterAppearance; className?: string }) {
+export function Portrait({
+  appearance,
+  className,
+  ancestryId,
+  heritageId,
+}: {
+  appearance: CharacterAppearance;
+  className?: string;
+  ancestryId?: string;
+  heritageId?: string;
+}) {
   const palette = getPalette(appearance.palette);
   const hash = hashString(`${appearance.seed}:${appearance.palette}:${appearance.sigil}`);
   const hood = hash % 3;
   const face = Math.floor(hash / 3) % 3;
   const hair = Math.floor(hash / 9) % 3;
   const id = `portrait-${hash.toString(16)}`;
+  const ancestry = (ancestryId ?? "").toLowerCase();
+  const heritage = (heritageId ?? "").toLowerCase();
+  const isElf = ancestry.includes("elf");
+  const isDwarf = ancestry.includes("dwarf");
+  const isOrc = ancestry.includes("orc");
+  const isBeastkin = ancestry.includes("beastkin");
+  const isHalfling = ancestry.includes("halfling");
 
   return (
     <svg viewBox="0 0 200 200" className={className} role="img" aria-label="Character portrait">
@@ -105,6 +122,39 @@ export function Portrait({ appearance, className }: { appearance: CharacterAppea
         strokeOpacity="0.5"
         strokeWidth="2"
       />
+
+      {/* ancestry features behind the hood */}
+      {isElf ? (
+        <g fill={palette.skin} stroke={palette.ink} strokeWidth="1.5">
+          <path d="M62 92 C42 78 36 86 40 104 C46 112 56 110 64 102 Z" />
+          <path d="M138 92 C158 78 164 86 160 104 C154 112 144 110 136 102 Z" />
+        </g>
+      ) : isBeastkin ? (
+        <g fill={palette.cloak} stroke={palette.ink} strokeWidth="2">
+          <path d="M66 74 C54 46 62 36 76 52 L84 70 Z" />
+          <path d="M134 74 C146 46 138 36 124 52 L116 70 Z" />
+          <path
+            d="M68 70 C62 52 66 46 74 56 L80 68 Z"
+            fill={heritage.includes("fox") ? palette.trim : palette.cloak}
+            opacity="0.7"
+          />
+          <path
+            d="M132 70 C138 52 134 46 126 56 L120 68 Z"
+            fill={heritage.includes("fox") ? palette.trim : palette.cloak}
+            opacity="0.7"
+          />
+        </g>
+      ) : isHalfling ? (
+        <g fill={palette.skin} stroke={palette.ink} strokeWidth="1.2">
+          <ellipse cx="64" cy="96" rx="8" ry="12" />
+          <ellipse cx="136" cy="96" rx="8" ry="12" />
+        </g>
+      ) : (
+        <g fill={palette.skin} stroke={palette.ink} strokeWidth="1">
+          <ellipse cx="66" cy="94" rx="5" ry="9" />
+          <ellipse cx="134" cy="94" rx="5" ry="9" />
+        </g>
+      )}
 
       {/* hood */}
       <path
@@ -165,6 +215,26 @@ export function Portrait({ appearance, className }: { appearance: CharacterAppea
         strokeWidth="1.6"
         strokeLinecap="round"
       />
+
+      {isOrc ? (
+        <g fill={palette.trim} stroke={palette.ink} strokeWidth="1.2">
+          <path d="M91 106 L94 118 L97 107 Z" />
+          <path d="M103 107 L106 118 L109 106 Z" />
+        </g>
+      ) : null}
+      {isDwarf && hash % 2 === 0 ? (
+        <path
+          d="M78 110 C84 136 94 142 100 142 C106 142 116 136 122 110 C112 120 88 120 78 110 Z"
+          fill={palette.ink}
+          opacity="0.72"
+        />
+      ) : null}
+      {isBeastkin ? (
+        <g fill={palette.trim} opacity="0.8">
+          <path d="M74 108 L82 112 L74 116 Z" />
+          <path d="M126 108 L118 112 L126 116 Z" />
+        </g>
+      ) : null}
 
       {/* cloak clasp / sigil */}
       <circle cx="100" cy="148" r="19" fill={palette.ink} stroke={palette.trim} strokeWidth="2" />

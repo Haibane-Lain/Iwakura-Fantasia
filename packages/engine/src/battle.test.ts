@@ -1,4 +1,4 @@
-import type { GameState } from "@iwakura/contracts";
+import type { CharacterBuild, GameState } from "@iwakura/contracts";
 import { describe, expect, it } from "vitest";
 import {
   battleAttack,
@@ -12,12 +12,13 @@ import {
   retreatBattle,
   startBattle,
 } from "./battle.js";
+import { defaultCharacterBuild } from "./character.js";
 import { enterLocalMap } from "./local.js";
 import { recruitCompanion } from "./social.js";
 import { createGameState } from "./world.js";
 import { generateWorld } from "./worldgen.js";
 
-function makeState(): GameState {
+function makeState(build?: CharacterBuild): GameState {
   return createGameState({
     world: generateWorld({ source: "handcrafted", seed: "core:redford_reach" }).world,
     settings: {
@@ -38,6 +39,7 @@ function makeState(): GameState {
     },
     campaignId: "test",
     campaignName: "Test",
+    build,
   });
 }
 
@@ -54,7 +56,7 @@ function forcePlayerTurn(state: GameState): GameState {
       ...battle,
       activeUnitId: player.id,
       units: battle.units.map((unit) =>
-        unit.id === player.id ? { ...unit, actionUsed: false, moved: 0 } : unit,
+        unit.id === player.id ? { ...unit, actionUsed: false, bonusUsed: false, moved: 0 } : unit,
       ),
     },
   };
@@ -189,6 +191,87 @@ describe("battle engine", () => {
     const next = battleCompanionTurn(state);
     expect(next).not.toBeNull();
     expect(next!.battle!.log.some((line) => line.includes(companion!.name))).toBe(true);
+  });
+
+  it("resolves data-driven damage and conditions", () => {
+    const build: CharacterBuild = {
+      ...defaultCharacterBuild("Talia"),
+      talentNodeIds: ["core:talent_fighter_shield_bash"],
+    };
+    let state = startBattle(makeState(build), { enemyIds: ["core:bandit"] })!;
+    state = forcePlayerTurn(state);
+    const battle = state.battle!;
+    const playerUnit = battle.units.find((unit) => unit.kind === "player")!;
+    const enemy = battle.units.find((unit) => unit.team === "enemy")!;
+    state = {
+      ...state,
+      battle: {
+        ...battle,
+        units: battle.units.map((unit) =>
+          unit.id === enemy.id
+            ? {
+                ...unit,
+                position: { q: playerUnit.position.q + 1, r: playerUnit.position.r },
+                hp: 50,
+                maxHp: 50,
+                ac: 1,
+              }
+            : unit,
+        ),
+      },
+    };
+    const focusBefore = state.entities.player!.focus.current;
+    const used = battleUseAbility(state, "core:shield_bash", enemy.id);
+    expect(used).not.toBeNull();
+    const damaged = used!.battle!.units.find((unit) => unit.id === enemy.id)!;
+    expect(damaged.hp).toBeLessThan(50);
+    expect(damaged.conditions).toContain("prone");
+    expect(used!.entities.player!.focus.current).toBe(focusBefore - 1);
+  });
+
+  it("applies temporary hit points from a support ability", () => {
+    const build: CharacterBuild = {
+      ...defaultCharacterBuild("Talia"),
+      talentNodeIds: ["core:talent_fighter_rally"],
+    };
+    let state = startBattle(makeState(build), { enemyIds: ["core:bandit"] })!;
+    state = forcePlayerTurn(state);
+    const playerUnit = state.battle!.units.find((unit) => unit.kind === "player")!;
+    const used = battleUseAbility(state, "core:rally", playerUnit.id);
+    expect(used).not.toBeNull();
+    expect(used!.battle!.units.find((unit) => unit.id === playerUnit.id)!.tempHp).toBe(4);
+  });
+
+  it("heals an ally with a targeted spell", () => {
+    const cleric: CharacterBuild = {
+      ...defaultCharacterBuild("Iven"),
+      ancestryId: "core:dwarf",
+      heritageId: "core:heritage_hill_dwarf",
+      classId: "core:cleric",
+      specialtyId: "core:domain_life",
+      kitId: "core:kit_cleric_light",
+      backgroundId: "core:acolyte",
+      talentNodeIds: ["core:talent_cleric_field_medic"],
+    };
+    let state = startBattle(makeState(cleric), { enemyIds: ["core:bandit"] })!;
+    state = forcePlayerTurn(state);
+    const playerUnit = state.battle!.units.find((unit) => unit.kind === "player")!;
+    state = {
+      ...state,
+      entities: {
+        ...state.entities,
+        player: { ...state.entities.player!, hp: { ...state.entities.player!.hp, current: 1 } },
+      },
+      battle: {
+        ...state.battle!,
+        units: state.battle!.units.map((unit) => (unit.id === playerUnit.id ? { ...unit, hp: 1 } : unit)),
+      },
+    };
+    const focusBefore = state.entities.player!.focus.current;
+    const used = battleUseAbility(state, "core:healing_word", playerUnit.id);
+    expect(used).not.toBeNull();
+    expect(used!.battle!.units.find((unit) => unit.id === playerUnit.id)!.hp).toBeGreaterThan(1);
+    expect(used!.entities.player!.focus.current).toBe(focusBefore - 2);
   });
 
   it("maps encounter ids to enemy groups", () => {

@@ -35,9 +35,10 @@ import type {
   ShopDefinition,
   ShopState,
 } from "@iwakura/contracts";
-import { addItemToInventory } from "./character.js";
+import { addItemToInventory, emptyProgression } from "./character.js";
 import { axialIndex, offsetToAxial } from "./grid.js";
 import { distance, findPath, hexKey } from "./hex.js";
+import { awardMilestone } from "./progression.js";
 import { adjustFaction, branchQuest, dismissCompanion, recruitCompanion, romanceGate } from "./social.js";
 import { advanceClock } from "./time.js";
 
@@ -181,6 +182,7 @@ export function createNpcEntity(npc: NpcDefinition): Entity {
     inventory: [],
     equipment: {},
     skillIds: [],
+    progression: emptyProgression(),
     appearance: {
       palette: npc.palette,
       sigil: npc.sigil,
@@ -872,6 +874,7 @@ export function claimQuest(state: GameState, questId: string): QuestResult {
   if (typeof quest.flags.factionId === "string") {
     next = adjustFaction(next, quest.flags.factionId, 5, `Completed ${title}`);
   }
+  next = awardMilestone(next, 1, `Completed ${title}.`);
   return {
     state: next,
     message: `Quest complete: ${title}. Received ${gold} gp.`,

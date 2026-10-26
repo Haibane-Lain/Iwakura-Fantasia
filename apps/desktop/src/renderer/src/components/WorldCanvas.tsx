@@ -34,7 +34,7 @@ export function WorldCanvas({ world, partyHex, onTravel, onHover }: WorldCanvasP
 
     void app
       .init({
-        backgroundColor: 0x080706,
+        backgroundColor: 0x0d100b,
         resizeTo: host,
         antialias: true,
         resolution: window.devicePixelRatio || 1,

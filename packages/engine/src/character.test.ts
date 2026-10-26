@@ -24,6 +24,12 @@ const humanFighter: CharacterBuild = {
   backgroundId: "core:soldier",
   baseAttributes: { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 },
   skillIds: ["athletics", "intimidation", "perception", "survival"],
+  expertiseSkillIds: [],
+  toolProficiencyIds: [],
+  languageIds: [],
+  talentNodeIds: [],
+  featIds: [],
+  startLevel: 1,
   appearance: { palette: "ember", sigil: "sword", seed: "ardan" },
 };
 
@@ -35,6 +41,12 @@ const elfWizard: CharacterBuild = {
   backgroundId: "core:scholar",
   baseAttributes: { str: 8, dex: 15, con: 12, int: 15, wis: 12, cha: 10 },
   skillIds: ["arcana", "history", "perception", "investigation"],
+  expertiseSkillIds: [],
+  toolProficiencyIds: [],
+  languageIds: [],
+  talentNodeIds: [],
+  featIds: [],
+  startLevel: 1,
   appearance: { palette: "frost", sigil: "eye", seed: "ilyra" },
 };
 
@@ -96,8 +108,8 @@ describe("character rules", () => {
     const entity = createPlayerEntity(humanFighter);
     expect(skillModifier(entity, "athletics")).toBe(5);
     expect(skillModifier(entity, "stealth")).toBe(2);
-    expect(saveModifier(entity, "str")).toBe(5);
-    expect(saveModifier(entity, "wis")).toBe(0);
+    expect(saveModifier(entity, "str")).toBe(6);
+    expect(saveModifier(entity, "wis")).toBe(1);
   });
 
   it("equips and unequips armor", () => {

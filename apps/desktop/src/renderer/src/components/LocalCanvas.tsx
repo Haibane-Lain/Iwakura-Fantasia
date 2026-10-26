@@ -25,6 +25,7 @@ export interface LocalCanvasProps {
   partyPath?: Hex[];
   focusNpcId?: string | null;
   cue?: ActorVisualCue | null;
+  tacticalGrid?: boolean;
   onSelect: (hex: Hex) => void;
   onHover: (hex: Hex | null) => void;
 }
@@ -44,6 +45,7 @@ export function LocalCanvas({
   partyPath,
   focusNpcId = null,
   cue = null,
+  tacticalGrid = false,
   onSelect,
   onHover,
 }: LocalCanvasProps) {
@@ -62,6 +64,7 @@ export function LocalCanvas({
   const weatherSeedRef = useRef(weatherSeed);
   const partyAppearanceRef = useRef(partyAppearance);
   const partyStatusRef = useRef(partyStatus);
+  const tacticalGridRef = useRef(tacticalGrid);
   const [error, setError] = useState<string | null>(null);
 
   callbacksRef.current = { onSelect, onHover };
@@ -76,6 +79,7 @@ export function LocalCanvas({
   weatherSeedRef.current = weatherSeed;
   partyAppearanceRef.current = partyAppearance;
   partyStatusRef.current = partyStatus;
+  tacticalGridRef.current = tacticalGrid;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -86,7 +90,7 @@ export function LocalCanvas({
 
     void app
       .init({
-        backgroundColor: 0x080706,
+        backgroundColor: mapRef.current.kind === "dungeon" ? 0x080706 : 0x12110d,
         resizeTo: host,
         antialias: true,
         resolution: window.devicePixelRatio || 1,
@@ -116,6 +120,7 @@ export function LocalCanvas({
           weatherSeedRef.current,
           partyAppearanceRef.current,
           partyStatusRef.current,
+          tacticalGridRef.current,
         );
         rendererRef.current = renderer;
       })

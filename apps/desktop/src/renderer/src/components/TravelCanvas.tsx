@@ -76,7 +76,7 @@ export function TravelCanvas({
 
     void app
       .init({
-        backgroundColor: 0x080706,
+        backgroundColor: 0x0d130d,
         resizeTo: host,
         antialias: true,
         resolution: window.devicePixelRatio || 1,

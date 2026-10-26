@@ -1,4 +1,4 @@
-﻿import { getLocalTile } from "@iwakura/content";
+import { getLocalTile } from "@iwakura/content";
 import type { Hex, LocalMap } from "@iwakura/contracts";
 import { axialToOffset, findPath, hashString, hexToPixel, localTileAt, pixelToHex } from "@iwakura/engine";
 import {
@@ -18,6 +18,7 @@ import type {
 } from "../render/iso/actors/actor-types";
 import { ActorView } from "../render/iso/actors/actor-view";
 import { AtmosphereFilter } from "../render/iso/atmosphere";
+import { drawBackdrop } from "../render/iso/backdrop";
 import { addBuildingVisuals, type BuildingVisual } from "../render/iso/buildings";
 import { clampIsoCamera, fitIsoCamera, screenToWorld } from "../render/iso/camera";
 import { IsoLabelLayer, type LabelEntry, makeLabel } from "../render/iso/labels";
@@ -88,8 +89,10 @@ export class LocalRenderer {
   private map: LocalMap;
   private partyHex: Hex;
   private readonly camera = new Container();
+  private readonly backdrop = new Graphics();
   private readonly terrainLayer = new Container();
   private readonly decalLayer = new Container();
+  private readonly gridLayer = new Graphics();
   private readonly overlayLayer = new Graphics();
   private readonly objectLayer = new Container();
   private readonly tintLayer = new Graphics();
@@ -121,6 +124,7 @@ export class LocalRenderer {
   private focusNpcId: string | null = null;
   private partyPathKey = "";
   private readonly partyAppearance: ActorAppearanceInput | undefined;
+  private readonly tacticalGrid: boolean;
   private reduceMotion: boolean;
   private destroyed = false;
 
@@ -138,7 +142,9 @@ export class LocalRenderer {
     weatherSeed = "",
     partyAppearance?: ActorAppearanceInput,
     partyStatus?: PartyActorStatus,
+    tacticalGrid = false,
   ) {
+    this.tacticalGrid = tacticalGrid;
     this.map = map;
     this.partyHex = partyHex;
     this.hour = hour;
@@ -153,10 +159,12 @@ export class LocalRenderer {
     this.callbacks = callbacks;
 
     this.objectLayer.sortableChildren = true;
-    this.app.stage.addChild(this.camera);
+    this.app.stage.addChild(this.backdrop, this.camera);
+    drawBackdrop(this.app, this.backdrop, map.kind === "dungeon" ? "dungeon" : "town", hour);
     this.camera.addChild(
       this.terrainLayer,
       this.decalLayer,
+      this.gridLayer,
       this.overlayLayer,
       this.objectLayer,
       this.tintLayer,
@@ -202,6 +210,7 @@ export class LocalRenderer {
 
   setHour(hour: number): void {
     this.hour = hour;
+    drawBackdrop(this.app, this.backdrop, this.map.kind === "dungeon" ? "dungeon" : "town", hour);
     this.drawTint();
     this.weather.setWeather(
       this.weatherSetting,
@@ -284,6 +293,7 @@ export class LocalRenderer {
       ? facingToward(actor.pixel, target.pixel, actor.view.currentFacing)
       : actor.view.currentFacing;
     actor.view.playCue(cue.kind, facing);
+    if (cue.damage && target) target.view.showDamage(cue.damage);
   }
 
   private clearLayer(layer: Container): void {
@@ -311,7 +321,10 @@ export class LocalRenderer {
         corners.flatMap((point) => [point.x, point.y]),
         true,
       )
-      .fill({ color: 0x050504, alpha: 0.5 });
+      .fill({
+        color: this.map.kind === "dungeon" ? 0x070606 : 0x0f0e0b,
+        alpha: 0.68,
+      });
     this.terrainLayer.addChild(background);
 
     const topGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
@@ -394,6 +407,26 @@ export class LocalRenderer {
     this.drawMarkers();
     this.drawDungeonLight();
     this.drawTint();
+    this.drawTacticalGrid();
+  }
+
+  private drawTacticalGrid(): void {
+    this.gridLayer.clear();
+    if (!this.tacticalGrid) return;
+    for (let row = 0; row < this.map.height; row += 1) {
+      for (let col = 0; col < this.map.width; col += 1) {
+        const hex = { q: col - Math.floor(row / 2), r: row };
+        const z = tileHeight(localTileAt(this.map, hex)) + 0.012;
+        const points = projectHexCorners(hex, HEX_SIZE, z, 0.4);
+        this.gridLayer
+          .poly(
+            points.flatMap((point) => [point.x, point.y]),
+            true,
+          )
+          .stroke({ color: 0x080706, width: 1.5, alpha: 0.32 })
+          .stroke({ color: 0xe8c987, width: 1.05, alpha: 0.55 });
+      }
+    }
   }
 
   private drawRoads(): void {
@@ -403,8 +436,8 @@ export class LocalRenderer {
     for (const segment of roadSegments(this.map)) {
       const from = projectHex(segment.from, HEX_SIZE, 0.04);
       const to = projectHex(segment.to, HEX_SIZE, 0.04);
-      addOrganicRibbon(shadow, from, to, { width: 14.5 });
-      addOrganicRibbon(road, from, to, { width: 11 });
+      addOrganicRibbon(shadow, from, to, { width: 22, repeat: 1 });
+      addOrganicRibbon(road, from, to, { width: 18, repeat: 1 });
     }
     for (const segment of waterSegments(this.map)) {
       addOrganicRibbon(
@@ -1043,11 +1076,19 @@ export class LocalRenderer {
   }
 
   private fitToScreen(): void {
-    const focus = projectHex(this.partyHex, HEX_SIZE, tileHeight(localTileAt(this.map, this.partyHex)));
+    let focusHex = this.partyHex;
+    if (this.tacticalGrid && this.actors.size > 0) {
+      const combatants = [this.partyHex, ...[...this.actors.values()].map((record) => record.hex)];
+      focusHex = {
+        q: Math.round(combatants.reduce((sum, hex) => sum + hex.q, 0) / combatants.length),
+        r: Math.round(combatants.reduce((sum, hex) => sum + hex.r, 0) / combatants.length),
+      };
+    }
+    const focus = projectHex(focusHex, HEX_SIZE, tileHeight(localTileAt(this.map, focusHex)));
     const initialScale = fitIsoCamera(this.app, this.camera, this.mapBounds, focus, {
-      padding: 42,
-      minScale: 0.55,
-      maxScale: 1.85,
+      padding: this.tacticalGrid ? 18 : 28,
+      minScale: this.tacticalGrid ? 0.9 : 0.55,
+      maxScale: this.tacticalGrid ? 1.45 : 2.45,
     });
     this.minScale = Math.max(0.3, initialScale * 0.65);
     this.maxScale = Math.max(2.6, initialScale * 3.2);
@@ -1114,6 +1155,7 @@ export class LocalRenderer {
 
   handleResize(): void {
     this.app.stage.hitArea = new Rectangle(0, 0, this.app.screen.width, this.app.screen.height);
+    drawBackdrop(this.app, this.backdrop, this.map.kind === "dungeon" ? "dungeon" : "town", this.hour);
     this.weather.resize();
     this.labels.update(this.camera);
   }

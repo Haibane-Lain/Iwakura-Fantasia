@@ -181,13 +181,41 @@ export const CharacterBuildSchema = z.object({
   name: z.string().min(1).max(60),
   pronouns: z.string().min(1).max(30).default("they/them"),
   ancestryId: ContentIdSchema,
+  heritageId: z.string().min(1).optional(),
   classId: ContentIdSchema,
+  subclassId: ContentIdSchema.optional(),
+  specialtyId: z.string().min(1).optional(),
   backgroundId: ContentIdSchema,
+  kitId: z.string().min(1).optional(),
   baseAttributes: AttributesSchema,
   skillIds: z.array(z.string().min(1)).min(2),
+  expertiseSkillIds: z.array(z.string().min(1)).default([]),
+  toolProficiencyIds: z.array(z.string().min(1)).default([]),
+  languageIds: z.array(z.string().min(1)).default([]),
+  talentNodeIds: z.array(z.string().min(1)).default([]),
+  featIds: z.array(z.string().min(1)).default([]),
+  startLevel: z.number().int().min(1).max(20).default(1),
   appearance: CharacterAppearanceSchema,
 });
 export type CharacterBuild = z.infer<typeof CharacterBuildSchema>;
+
+export const ProgressionStateSchema = z.object({
+  milestones: z.number().int().min(0).default(0),
+  pendingLevelUps: z.number().int().min(0).default(0),
+  subclassId: ContentIdSchema.optional(),
+  specialtyId: z.string().min(1).optional(),
+  talentPoints: z.number().int().min(0).default(0),
+  spentTalentNodeIds: z.array(z.string().min(1)).default([]),
+  featIds: z.array(z.string().min(1)).default([]),
+  asiChoices: z.record(z.string(), z.number().int()).default({}),
+  expertiseSkillIds: z.array(z.string().min(1)).default([]),
+  toolProficiencyIds: z.array(z.string().min(1)).default([]),
+  languageIds: z.array(z.string().min(1)).default([]),
+  resistances: z.array(z.string().min(1)).default([]),
+  talentTreeId: ContentIdSchema.optional(),
+  notes: z.array(z.string().min(1)).default([]),
+});
+export type ProgressionState = z.infer<typeof ProgressionStateSchema>;
 
 export const EntityKindSchema = z.enum(["player", "npc", "companion", "enemy", "object"]);
 export type EntityKind = z.infer<typeof EntityKindSchema>;
@@ -199,6 +227,7 @@ export const EntitySchema = z.object({
   pronouns: z.string().max(30).default("they/them"),
   description: z.string().max(2000).default(""),
   ancestryId: ContentIdSchema.optional(),
+  heritageId: z.string().min(1).optional(),
   classId: ContentIdSchema.optional(),
   backgroundId: ContentIdSchema.optional(),
   level: z.number().int().min(1).max(20).default(1),
@@ -212,6 +241,7 @@ export const EntitySchema = z.object({
   inventory: z.array(InventoryEntrySchema).default([]),
   equipment: EquipmentSchema.default({}),
   skillIds: z.array(z.string().min(1)).default([]),
+  progression: ProgressionStateSchema.prefault({}),
   appearance: CharacterAppearanceSchema.optional(),
   factionId: z.string().optional(),
   hex: HexSchema.optional(),
@@ -407,6 +437,9 @@ export const BattleUnitSchema = z.object({
   defeated: z.boolean().default(false),
   palette: z.string().optional(),
   conditions: z.array(z.string()).default([]),
+  conditionTurns: z.record(z.string(), z.number().int().min(0)).default({}),
+  tempHp: z.number().int().min(0).default(0),
+  resistances: z.array(z.string()).default([]),
 });
 export type BattleUnit = z.infer<typeof BattleUnitSchema>;
 

@@ -532,7 +532,7 @@ export class WorldRenderer {
         const fog = this.world.fog[index] ?? 0;
         if (fog === 2) continue;
         const center = hexToPixel(offsetToAxial({ col, row }), HEX_SIZE + 0.5);
-        drawHex(this.fogLayer, center, HEX_SIZE + 0.5, 0x070605, fog === 0 ? 1 : 0.52);
+        drawHex(this.fogLayer, center, HEX_SIZE + 0.5, 0x151711, fog === 0 ? 0.72 : 0.3);
       }
     }
   }

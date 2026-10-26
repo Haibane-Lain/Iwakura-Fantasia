@@ -94,6 +94,7 @@ export interface ActorVisualCue {
   actorId: string;
   kind: ActorVisualCueKind;
   targetId?: string;
+  damage?: number;
 }
 
 export interface PartyActorStatus {

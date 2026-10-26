@@ -24,6 +24,8 @@ import {
   DoorOpen,
   Footprints,
   Map as MapIcon,
+  PanelRightClose,
+  PanelRightOpen,
   Save,
   Swords,
   UserRound,
@@ -57,6 +59,8 @@ export function TravelScreen() {
   const [questOpen, setQuestOpen] = useState(false);
   const [toast, setToast] = useState<{ text: string; tone: "info" | "warn" } | null>(null);
   const [transition, setTransition] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [titleCard, setTitleCard] = useState<string | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -85,6 +89,15 @@ export function TravelScreen() {
     }, 8000);
     return () => clearInterval(timer);
   }, [saveCampaign]);
+
+  useEffect(() => {
+    if (!travelWorldKey) return;
+    const current = latest.current?.travel;
+    if (!current) return;
+    setTitleCard(current.map.name);
+    const timer = setTimeout(() => setTitleCard(null), 1800);
+    return () => clearTimeout(timer);
+  }, [travelWorldKey]);
 
   const travel = campaign?.travel;
   const player = campaign?.entities.player;
@@ -217,7 +230,7 @@ export function TravelScreen() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <div className="absolute inset-0 right-[360px]">
+      <div className={cn("absolute inset-0", sidebarOpen ? "right-[360px]" : "right-0")}>
         <TravelCanvas
           key={`${travel.worldHex.q},${travel.worldHex.r}:${travel.entryEdge ?? "start"}:${map.id}`}
           map={map}
@@ -238,13 +251,30 @@ export function TravelScreen() {
           onFacing={handleFacing}
         />
       </div>
-      <div className="pointer-events-none absolute inset-0 right-[360px] bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(8,7,6,0.48))]" />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_42%,rgba(8,7,6,0.55))]",
+          sidebarOpen ? "right-[360px]" : "right-0",
+        )}
+      />
 
       {transition ? (
         <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center bg-void/70 backdrop-blur-[2px]">
           <div className="border border-gold/40 bg-ink px-6 py-4 text-center">
             <Compass className="mx-auto size-5 text-gold" />
             <p className="mt-2 font-display text-lg text-parchment">{transition}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {titleCard ? (
+        <div className="pointer-events-none absolute left-1/2 top-24 z-20 -translate-x-1/2 animate-fade-up text-center">
+          <div className="mx-auto h-px w-28 bg-gradient-to-r from-transparent via-gold/50 to-transparent" />
+          <div className="mt-2 font-display text-xl tracking-[0.12em] text-parchment drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+            {titleCard}
+          </div>
+          <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-gold/70">
+            {travel.worldHex.q}, {travel.worldHex.r}
           </div>
         </div>
       ) : null}
@@ -310,10 +340,25 @@ export function TravelScreen() {
               <div className="text-[9px] uppercase tracking-[0.12em] text-faint">field save</div>
             </div>
           </div>
+          <div className="h-8 w-px bg-line-soft" />
+          <button
+            type="button"
+            className="btn btn-ghost px-1.5! py-1!"
+            onClick={() => setSidebarOpen((open) => !open)}
+            title={sidebarOpen ? "Hide field panel" : "Show field panel"}
+            aria-label={sidebarOpen ? "Hide field panel" : "Show field panel"}
+          >
+            {sidebarOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+          </button>
         </Panel>
       </div>
 
-      <div className="absolute bottom-4 left-4 right-[368px] flex items-end justify-between gap-4">
+      <div
+        className={cn(
+          "absolute bottom-4 left-4 flex items-end justify-between gap-4",
+          sidebarOpen ? "right-[368px]" : "right-4",
+        )}
+      >
         <Panel className="pointer-events-auto min-w-0 max-w-2xl px-3 py-2">
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <Compass className="size-3.5 text-gold/60" />
@@ -339,7 +384,12 @@ export function TravelScreen() {
         </div>
       </div>
 
-      <aside className="absolute bottom-4 right-4 top-[76px] flex w-[344px] flex-col gap-3 overflow-y-auto pr-1">
+      <aside
+        className={cn(
+          "absolute bottom-4 right-4 top-[76px] w-[344px] flex-col gap-3 overflow-y-auto pr-1",
+          sidebarOpen ? "flex" : "hidden",
+        )}
+      >
         <Panel className="border-gold/25 p-4">
           <div className="flex items-center justify-between">
             <SectionLabel>Field map</SectionLabel>

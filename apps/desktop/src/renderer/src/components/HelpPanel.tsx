@@ -14,13 +14,25 @@ const CONTROLS = [
     "WASD or Q/E walk relative to the view · click a hex to pathfind · step onto an exit to return",
   ],
   ["Dialogue", "Choose authored lines or ask the AI · Esc closes the conversation"],
-  ["Battle", "Click a reachable hex to move · select an enemy · Attack or use an ability"],
+  [
+    "Battle",
+    "Click a reachable hex to move · select an enemy or ally · Attack or use an ability · action and bonus action are tracked",
+  ],
   ["Journal", "Track objectives, rumors, faction standing, and the chronicle recap"],
 ];
 
 const SYSTEMS = [
   ["Dice", "The engine rolls all checks, attacks, damage, initiative, and skill tests."],
   ["Focus", "Class abilities spend Focus. Short and long rests restore it."],
+  [
+    "Progression",
+    "Quests and victories award milestones. Level up on the Character → Path tab. Subclass at 3; ASI or feat at 4/8/10.",
+  ],
+  [
+    "Talents",
+    "Every level grants a talent point. Spend it on the class tree in Character → Talents. Tier 3 nodes cost 2 points.",
+  ],
+  ["Skills", "Proficiency adds your level bonus. Expertise doubles it. Checks support DCs and advantage."],
   ["Saves", "Autosave writes the active chronicle. Slots are manual snapshots in Settings."],
   ["AI", "The narrator proposes speech and intents. The engine validates every state change."],
   ["Companions", "Recruitable NPCs travel with you, fight on their turns, and react to choices."],

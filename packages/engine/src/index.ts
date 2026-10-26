@@ -6,6 +6,7 @@ export * from "./grid.js";
 export * from "./hex.js";
 export * from "./local.js";
 export * from "./noise.js";
+export * from "./progression.js";
 export * from "./rng.js";
 export * from "./social.js";
 export * from "./state-rng.js";
