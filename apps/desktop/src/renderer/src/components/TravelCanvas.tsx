@@ -2,6 +2,8 @@ import "pixi.js/unsafe-eval";
 import type { Hex, LocalMap, TravelEnemyGroup } from "@iwakura/contracts";
 import { Application } from "pixi.js";
 import { useEffect, useRef, useState } from "react";
+import type { ActorAppearanceInput } from "../render/iso/actors/actor-types";
+import type { GraphicsQuality, WeatherSetting } from "../render/iso/weather";
 import { type TravelCompanionMarker, TravelRenderer } from "./travel-renderer";
 
 export interface TravelCanvasProps {
@@ -13,6 +15,11 @@ export interface TravelCanvasProps {
   paused?: boolean;
   hour?: number;
   reduceMotion?: boolean;
+  weatherSetting?: WeatherSetting;
+  graphicsQuality?: GraphicsQuality;
+  weatherSeed?: string;
+  partyAppearance?: ActorAppearanceInput;
+  partyFacing?: number;
   onAnchor: (hex: Hex) => void;
   onHover: (hex: Hex | null) => void;
   onFacing: (direction: number) => void;
@@ -27,6 +34,11 @@ export function TravelCanvas({
   paused = false,
   hour = 12,
   reduceMotion = false,
+  weatherSetting = "auto",
+  graphicsQuality = "balanced",
+  weatherSeed = "",
+  partyAppearance,
+  partyFacing = 0,
   onAnchor,
   onHover,
   onFacing,
@@ -36,7 +48,20 @@ export function TravelCanvas({
   const rendererRef = useRef<TravelRenderer | null>(null);
   const callbacksRef = useRef({ onAnchor, onHover, onFacing });
   const pausedRef = useRef(paused);
-  const initialRef = useRef({ map, partyHex, partyName, companions, enemies, hour, reduceMotion });
+  const initialRef = useRef({
+    map,
+    partyHex,
+    partyName,
+    companions,
+    enemies,
+    hour,
+    reduceMotion,
+    weatherSetting,
+    graphicsQuality,
+    weatherSeed,
+    partyAppearance,
+    partyFacing,
+  });
   const [error, setError] = useState<string | null>(null);
 
   callbacksRef.current = { onAnchor, onHover, onFacing };
@@ -79,6 +104,11 @@ export function TravelCanvas({
           },
           initial.hour,
           initial.reduceMotion,
+          initial.weatherSetting,
+          initial.graphicsQuality,
+          initial.weatherSeed,
+          initial.partyAppearance,
+          initial.partyFacing,
         );
         rendererRef.current = renderer;
         renderer.setPaused(pausedRef.current);
@@ -120,6 +150,14 @@ export function TravelCanvas({
   useEffect(() => {
     rendererRef.current?.setReduceMotion(reduceMotion);
   }, [reduceMotion]);
+
+  useEffect(() => {
+    rendererRef.current?.setWeatherSetting(weatherSetting);
+  }, [weatherSetting]);
+
+  useEffect(() => {
+    rendererRef.current?.setGraphicsQuality(graphicsQuality);
+  }, [graphicsQuality]);
 
   if (error) {
     return (

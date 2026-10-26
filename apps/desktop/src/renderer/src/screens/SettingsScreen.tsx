@@ -106,6 +106,8 @@ export function SettingsScreen() {
         highContrast: form.highContrast,
         showTooltips: form.showTooltips,
         uiScale: form.uiScale,
+        graphicsQuality: form.graphicsQuality,
+        weather: form.weather,
       });
       applySettings(result);
       setForm(result.settings);
@@ -488,6 +490,46 @@ export function SettingsScreen() {
                   <option value="story">Story</option>
                   <option value="normal">Normal</option>
                   <option value="hard">Hard</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="graphics-quality">
+                  Graphics quality
+                </label>
+                <select
+                  id="graphics-quality"
+                  className="input"
+                  value={form.graphicsQuality}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      graphicsQuality: event.target.value as AppSettings["graphicsQuality"],
+                    })
+                  }
+                >
+                  <option value="low">Low — static effects, fewer props</option>
+                  <option value="balanced">Balanced — animated water and weather</option>
+                  <option value="high">High — full atmosphere</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="weather">
+                  Weather
+                </label>
+                <select
+                  id="weather"
+                  className="input"
+                  value={form.weather}
+                  onChange={(event) =>
+                    setForm({ ...form, weather: event.target.value as AppSettings["weather"] })
+                  }
+                >
+                  <option value="auto">Automatic by time and place</option>
+                  <option value="off">Clear skies</option>
+                  <option value="rain">Rain</option>
+                  <option value="snow">Snow</option>
+                  <option value="fog">Fog</option>
+                  <option value="storm">Storm</option>
                 </select>
               </div>
               <div>

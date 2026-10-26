@@ -2,6 +2,12 @@ import "pixi.js/unsafe-eval";
 import type { Hex, LocalMap } from "@iwakura/contracts";
 import { Application } from "pixi.js";
 import { useEffect, useRef, useState } from "react";
+import type {
+  ActorAppearanceInput,
+  ActorVisualCue,
+  PartyActorStatus,
+} from "../render/iso/actors/actor-types";
+import type { GraphicsQuality, WeatherSetting } from "../render/iso/weather";
 import { type LocalNpcMarker, LocalRenderer } from "./local-renderer";
 
 export interface LocalCanvasProps {
@@ -11,6 +17,14 @@ export interface LocalCanvasProps {
   hour?: number;
   partyActive?: boolean;
   reduceMotion?: boolean;
+  weatherSetting?: WeatherSetting;
+  graphicsQuality?: GraphicsQuality;
+  weatherSeed?: string;
+  partyAppearance?: ActorAppearanceInput;
+  partyStatus?: PartyActorStatus;
+  partyPath?: Hex[];
+  focusNpcId?: string | null;
+  cue?: ActorVisualCue | null;
   onSelect: (hex: Hex) => void;
   onHover: (hex: Hex | null) => void;
 }
@@ -22,6 +36,14 @@ export function LocalCanvas({
   hour = 12,
   partyActive = false,
   reduceMotion = false,
+  weatherSetting = "auto",
+  graphicsQuality = "balanced",
+  weatherSeed = "",
+  partyAppearance,
+  partyStatus,
+  partyPath,
+  focusNpcId = null,
+  cue = null,
   onSelect,
   onHover,
 }: LocalCanvasProps) {
@@ -35,6 +57,11 @@ export function LocalCanvas({
   const hourRef = useRef(hour);
   const partyActiveRef = useRef(partyActive);
   const reduceMotionRef = useRef(reduceMotion);
+  const weatherSettingRef = useRef(weatherSetting);
+  const graphicsQualityRef = useRef(graphicsQuality);
+  const weatherSeedRef = useRef(weatherSeed);
+  const partyAppearanceRef = useRef(partyAppearance);
+  const partyStatusRef = useRef(partyStatus);
   const [error, setError] = useState<string | null>(null);
 
   callbacksRef.current = { onSelect, onHover };
@@ -44,6 +71,11 @@ export function LocalCanvas({
   hourRef.current = hour;
   partyActiveRef.current = partyActive;
   reduceMotionRef.current = reduceMotion;
+  weatherSettingRef.current = weatherSetting;
+  graphicsQualityRef.current = graphicsQuality;
+  weatherSeedRef.current = weatherSeed;
+  partyAppearanceRef.current = partyAppearance;
+  partyStatusRef.current = partyStatus;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -79,6 +111,11 @@ export function LocalCanvas({
           hourRef.current,
           partyActiveRef.current,
           reduceMotionRef.current,
+          weatherSettingRef.current,
+          graphicsQualityRef.current,
+          weatherSeedRef.current,
+          partyAppearanceRef.current,
+          partyStatusRef.current,
         );
         rendererRef.current = renderer;
       })
@@ -107,8 +144,8 @@ export function LocalCanvas({
   }, []);
 
   useEffect(() => {
-    rendererRef.current?.update(map, partyHex, npcs);
-  }, [map, partyHex, npcs]);
+    rendererRef.current?.update(map, partyHex, npcs, partyPath);
+  }, [map, partyHex, npcs, partyPath]);
 
   useEffect(() => {
     rendererRef.current?.setHour(hour);
@@ -119,8 +156,28 @@ export function LocalCanvas({
   }, [partyActive]);
 
   useEffect(() => {
+    if (partyStatus) rendererRef.current?.setPartyStatus(partyStatus);
+  }, [partyStatus]);
+
+  useEffect(() => {
+    rendererRef.current?.setFocusNpc(focusNpcId);
+  }, [focusNpcId]);
+
+  useEffect(() => {
+    if (cue) rendererRef.current?.playCue(cue);
+  }, [cue]);
+
+  useEffect(() => {
     rendererRef.current?.setReduceMotion(reduceMotion);
   }, [reduceMotion]);
+
+  useEffect(() => {
+    rendererRef.current?.setWeatherSetting(weatherSetting);
+  }, [weatherSetting]);
+
+  useEffect(() => {
+    rendererRef.current?.setGraphicsQuality(graphicsQuality);
+  }, [graphicsQuality]);
 
   if (error) {
     return (

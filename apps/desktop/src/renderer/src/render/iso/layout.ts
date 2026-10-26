@@ -33,7 +33,7 @@ export function tileHeight(tileId: string): number {
 
 /** Stable per-tile texture variant. */
 export function tileVariant(mapId: string, hex: Hex, tileId: string): number {
-  return hashString(`${mapId}:tile:${hex.q}:${hex.r}:${tileId}`) % 3;
+  return hashString(`${mapId}:tile:${hex.q}:${hex.r}:${tileId}`) % 4;
 }
 
 export interface IsoBounds {

@@ -23,10 +23,11 @@ import {
   Sparkles,
   Swords,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { playImpact, playReward } from "../audio";
 import { LocalCanvas } from "../components/LocalCanvas";
 import { cn, Panel, SectionLabel, StatusDot } from "../components/ui";
+import type { ActorVisualCue, ActorVisualCueKind } from "../render/iso/actors/actor-types";
 import { useAppStore } from "../state/useAppStore";
 
 export function BattleScreen() {
@@ -36,6 +37,8 @@ export function BattleScreen() {
   const settings = useAppStore((state) => state.settings);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
+  const [visualCue, setVisualCue] = useState<ActorVisualCue | null>(null);
+  const cueNonce = useRef(0);
 
   useEffect(() => {
     if (campaign?.battle?.status === "victory" && settings) {
@@ -50,6 +53,17 @@ export function BattleScreen() {
     window.setTimeout(() => setFlash(false), 240);
   };
 
+  const showCue = (actorId: string, kind: ActorVisualCueKind, targetId?: string) => {
+    cueNonce.current += 1;
+    setVisualCue({ nonce: cueNonce.current, actorId, kind, targetId });
+  };
+
+  useEffect(() => {
+    if (campaign?.battle?.status !== "victory") return;
+    cueNonce.current += 1;
+    setVisualCue({ nonce: cueNonce.current, actorId: "party", kind: "victory" });
+  }, [campaign?.battle?.status]);
+
   if (!campaign?.battle) return null;
   const battle = campaign.battle;
   const map = battle.map;
@@ -58,7 +72,7 @@ export function BattleScreen() {
   const playerEntity = campaign.entities.player;
   const active = battle.units.find((unit) => unit.id === battle.activeUnitId);
   const enemies = battle.units.filter((unit) => unit.team === "enemy" && !unit.defeated);
-  const selected = battle.units.find((unit) => unit.id === selectedId) ?? enemies[0];
+  const selected = battle.units.find((unit) => unit.id === selectedId && !unit.defeated) ?? enemies[0];
   const playerTurn = active?.kind === "player" && battle.status === "active";
   const adjacent = Boolean(player && selected && distance(player.position, selected.position) <= 1);
   const movementLeft = player ? player.speed - player.moved : 0;
@@ -81,6 +95,7 @@ export function BattleScreen() {
     if (!selected || !playerTurn) return;
     const next = battleAttack(campaign, selected.id);
     if (next) {
+      showCue("party", "attack", selected.id);
       impact();
       void persist(next);
     }
@@ -93,6 +108,7 @@ export function BattleScreen() {
     const target = ability.targeting === "self" ? undefined : selected?.id;
     const next = battleUseAbility(campaign, abilityId, target);
     if (next) {
+      showCue("party", abilityId.includes("shield") ? "guard" : "cast", target ?? "party");
       impact();
       void persist(next);
     }
@@ -108,28 +124,32 @@ export function BattleScreen() {
     if (next) void persist(next);
   };
 
-  const markers = [
-    ...enemies.map((unit) => ({
-      id: unit.id,
-      name: unit.name,
-      hex: unit.position,
-      palette: unit.palette ?? "ember",
-      activity: `${unit.hp}/${unit.maxHp} hp`,
-      kind: "enemy" as const,
-      active: unit.id === battle.activeUnitId,
-    })),
-    ...battle.units
-      .filter((unit) => unit.kind === "companion" && !unit.defeated)
-      .map((unit) => ({
+  const markers = battle.units
+    .filter((unit) => unit.kind !== "player")
+    .map((unit) => {
+      const entity = unit.entityId ? campaign.entities[unit.entityId] : undefined;
+      const kind = unit.kind === "companion" ? ("companion" as const) : ("enemy" as const);
+      return {
         id: unit.id,
         name: unit.name,
         hex: unit.position,
-        palette: unit.palette ?? "moss",
+        palette: unit.palette ?? (kind === "enemy" ? "ember" : "moss"),
         activity: `${unit.hp}/${unit.maxHp} hp`,
-        kind: "companion" as const,
+        kind,
         active: unit.id === battle.activeUnitId,
-      })),
-  ];
+        selected: unit.id === selected?.id,
+        defeated: unit.defeated,
+        conditions: unit.conditions,
+        hp: unit.hp,
+        maxHp: unit.maxHp,
+        seed: unit.id,
+        ancestryId: entity?.ancestryId,
+        classId: entity?.classId,
+        sigil: entity?.appearance?.sigil,
+        mainHand: entity?.equipment.mainHand,
+        offHand: entity?.equipment.offHand,
+      };
+    });
 
   return (
     <div className="relative h-full overflow-hidden">
@@ -142,6 +162,31 @@ export function BattleScreen() {
           hour={campaign.clock.hour}
           partyActive={active?.kind === "player"}
           reduceMotion={settings?.settings.reduceMotion ?? false}
+          weatherSetting={settings?.settings.weather ?? "auto"}
+          graphicsQuality={settings?.settings.graphicsQuality ?? "balanced"}
+          weatherSeed={campaign.world.seed}
+          partyAppearance={
+            playerEntity
+              ? {
+                  id: playerEntity.id,
+                  name: playerEntity.name,
+                  palette: playerEntity.appearance?.palette ?? "gold",
+                  seed: playerEntity.appearance?.seed,
+                  ancestryId: playerEntity.ancestryId,
+                  classId: playerEntity.classId,
+                  sigil: playerEntity.appearance?.sigil,
+                  mainHand: playerEntity.equipment.mainHand,
+                  offHand: playerEntity.equipment.offHand,
+                }
+              : undefined
+          }
+          partyStatus={{
+            active: active?.kind === "player",
+            defeated: player?.defeated ?? false,
+            hpRatio: player ? player.hp / Math.max(1, player.maxHp) : 1,
+            conditions: player?.conditions ?? [],
+          }}
+          cue={visualCue}
           onSelect={(hex) => {
             const unit = battleUnitAt(battle, hex);
             if (unit && unit.team === "enemy") setSelectedId(unit.id);
@@ -281,8 +326,16 @@ export function BattleScreen() {
                   type="button"
                   className="btn btn-primary mt-3 w-full"
                   onClick={() => {
+                    const actorId = active.id;
+                    const before = new Map(battle.units.map((unit) => [unit.id, unit.hp]));
                     const next = battleCompanionTurn(campaign);
-                    if (next) void persist(next);
+                    if (next) {
+                      const damaged = next.battle?.units.find(
+                        (unit) => (before.get(unit.id) ?? unit.hp) > unit.hp,
+                      );
+                      showCue(actorId, "attack", damaged?.kind === "player" ? "party" : damaged?.id);
+                      void persist(next);
+                    }
                   }}
                 >
                   <Swords className="size-3.5" />
@@ -299,8 +352,16 @@ export function BattleScreen() {
                   type="button"
                   className="btn btn-primary mt-3 w-full"
                   onClick={() => {
+                    const actorId = active.id;
+                    const before = new Map(battle.units.map((unit) => [unit.id, unit.hp]));
                     const next = battleEnemyTurn(campaign);
-                    if (next) void persist(next);
+                    if (next) {
+                      const damaged = next.battle?.units.find(
+                        (unit) => (before.get(unit.id) ?? unit.hp) > unit.hp,
+                      );
+                      showCue(actorId, "attack", damaged?.kind === "player" ? "party" : damaged?.id);
+                      void persist(next);
+                    }
                   }}
                 >
                   <Dices className="size-3.5" />

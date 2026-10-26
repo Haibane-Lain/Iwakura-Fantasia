@@ -4,7 +4,7 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 
 > The engine owns the rules. The narrator owns the voice. The model proposes; the engine disposes.
 
-**Status:** All milestones M0–M8 complete, plus the isometric field-art pass. Travel Map, vertical slice, installer, and live OpenCode Go verified.
+**Status:** All milestones M0–M8 complete, plus the isometric field-art, atmosphere, and actor-rig pass. Travel Map, vertical slice, installer, and live OpenCode Go verified.
 **Platform:** Windows desktop, Electron.
 **Full plan:** [docs/PLAN.md](docs/PLAN.md) · **Acceptance:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
@@ -19,15 +19,19 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **SQLite persistence** via Node's built-in `node:sqlite` (WAL mode), with repositories for settings, AI calls, model cache, and campaigns.
 - **OpenCode Go gateway** with the `x-opencode-session` header, model catalog, streaming turns, token/cost accounting, and clean provider errors.
 - **AI Lab** for exercising the narrator layer: presets, system prompt, temperature, streamed transcript, raw SSE event inspector, and recent-call telemetry.
-- **Settings** for provider credentials, per-role model routing, temperature, monthly budget, content rating, difficulty, and UI scale.
+- **Settings** for provider credentials, per-role model routing, temperature, monthly budget, content rating, difficulty, UI scale, graphics quality, and weather.
 - **Local server API** with bearer-token auth, health, settings, model catalog, AI calls, campaign saves, and SSE test turns.
 - **Procedural world generation** in a Web Worker: elevation, climate, moisture, rivers, lakes, biomes, settlements, dungeons, landmarks, and terrain-aware road networks.
 - **World validation report** with hard errors and warnings before a world can be entered.
 - **Handcrafted world packs** with a sample region, Redford Reach, and the same runtime schema as generated worlds.
 - **Textured PixiJS atlas** with pan/zoom, fog of war, labels, hover path previews, rivers, roads, party token, and fast travel.
-- **Isometric Travel Map**: each world hex expands into a deterministic field diorama with textured hex terrain, extruded hills and cliffs, roads, rivers, forest props, settlement gates, edge gates, visible enemy groups, and smooth screen-relative WASD movement.
-- **Procedural isometric art**: seeded canvas textures and simple textured meshes for terrain, buildings, props, and figures. No external art dependency and no mandatory asset pipeline.
-- **Organic crossings**: walk through a road edge to enter the neighbouring world hex, or through a settlement gate to load its town map. Town maps accept WASD or click movement; leaving returns to the same gate.
+- **Isometric Travel Map**: each world hex expands into a deterministic field diorama with layered grass, flowers, crops, organic roads, extruded hills and cliffs, forest props, settlement gates, edge gates, visible enemy groups, and smooth screen-relative WASD movement.
+- **Layered actor rigs**: procedural player, NPC, companion, and enemy silhouettes with ancestry/class/equipment-driven appearance, eight screen-space facings, walk/run cycles, attacks, casting, guarding, hurt reactions, defeat poses, and victory. Bandits, wolves, and crypt shades use distinct rigs.
+- **Actor state feedback**: active-turn rings, target rings, alerted enemy stances, NPC talk/focus poses, condition auras, and transient defeated poses. Animations are cosmetic and never change combat timing or saves.
+- **Animated atmosphere**: scrolling water and shoreline foam, rain, snow, fog, storm flashes, drifting leaves, and dungeon dust. Weather is derived from the clock and place, and can be fixed or disabled in Settings.
+- **Procedural isometric art**: seeded canvas textures, vector-authored shapes, layered actor rigs, low-poly mountain billboards, building meshes, and props. No external art dependency and no mandatory asset pipeline.
+- **Shader atmosphere**: a camera-level colour-grade/vignette filter, animated water texture matrices, and quality-scaled weather layers. Low, Balanced, and High presets trade effects for performance.
+- **Organic crossings**: walk through a road edge to enter the neighbouring world hex, or through a settlement gate to load its town map. Town maps accept camera-relative WASD/QE or click movement; leaving returns to the same gate.
 - **Seamless combat**: visible enemy groups auto-aggro and turn the current field into an isometric battle map; victory, retreat, and defeat return to the field.
 - **World time and campaign saves**: travel advances the clock, reveals fog, discovers landmarks, and persists through SQLite.
 - **Character creation wizard**: 3 ancestries, 3 classes, 3 backgrounds, point buy, standard array, rolled 4d6 stats, class/background skill choices, appearance, portrait, sigil, name, and pronouns.
@@ -46,10 +50,14 @@ A single-player, hex-based fantasy RPG with a deterministic rules engine and an 
 - **Director and evolving quests**: validated director operations, procedural work templates, faction/rumor reactions, branching Greywatch outcomes, and a deterministic quest recap.
 - **Companions**: Wren can be recruited, fights on her own turn, comments at camp, tracks approval, can be dismissed, and participates in romance gates.
 - **Save and polish**: three manual save slots, JSON export/import, autosave, keyboard/accessibility pass, field guide, generated audio/VFX, high contrast, reduced motion, custom Windows icon, and NSIS installer.
-- **Tests**: 103 Vitest tests and a Playwright Electron smoke test covering world and character creation, isometric Travel Map entry and screen-relative movement, atlas fast travel, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, and the non-destructive keystore path.
-- **Packaged Windows build** via electron-builder: 4.27 MB `app.asar`, no native modules. `pnpm package:installer` produces a 112 MB NSIS setup executable with the custom icon.
+- **Tests**: 119 Vitest tests and a Playwright Electron smoke test covering world and character creation, isometric Travel Map entry and screen-relative movement, atlas fast travel, town dialogue, trade, quest completion, dungeon exploration, a battle and retreat, local save/continue, deterministic weather selection, actor facing/appearance/state rules, and the non-destructive keystore path.
+- **Packaged Windows build** via electron-builder: 4.6 MB `app.asar`, no native modules. `pnpm package:installer` produces a 112 MB NSIS setup executable with the custom icon.
 
 ![Travel Map](docs/images/travel-map.png)
+
+![Rain over the travel map](docs/images/weather-rain.png)
+
+![Snow over the travel map](docs/images/weather-snow.png)
 
 ![Atlas and fast travel](docs/images/atlas.png)
 
@@ -222,10 +230,12 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 - The world map renders textured terrain through batched PixiJS meshes rather than baked chunk textures. Chunk baking is deferred until larger map sizes or profiling demand it.
 - The core worldgen rules cover land/water, rivers, settlements, roads, dungeons, and spacing. Ports, faction territories, resource economies, rain shadows, and full climate-band validation are deferred.
 - The procedural world is validated and rejects hard errors; it does not yet run an automatic repair pass. Rerolling the seed is the current repair path.
-- Travel Maps use one detailed map per world hex. Each is deterministic, but currently a single biome-driven layout template; handcrafted landmark silhouettes, weather systems, patrol schedules, and local events are post-slice.
+- Travel Maps use one detailed map per world hex. Each is deterministic, but currently a single biome-driven layout template; handcrafted landmark silhouettes, patrol schedules, and local events are post-slice.
 - Town and dungeon maps use an isometric PixiJS renderer built on the same hex geometry and pathfinding as the world map. Buildings are facade interactions; enterable interiors are deferred.
-- Travel Map movement is smooth, screen-relative WASD after the first field is entered. Town interiors also accept WASD step movement or click-to-walk, with automatic exit when an exit hex is reached.
-- The isometric art pass generates textures and meshes at runtime. There is no external asset pipeline, LOD system, or baked field-chunk cache yet; weather and water animation are intentionally light.
+- Travel Map movement is smooth, screen-relative WASD after the first field is entered. Town interiors also accept camera-relative WASD/QE step movement or click-to-walk, with automatic exit when an exit hex is reached.
+- The isometric art pass generates textures, vector shapes, actor rigs, and meshes at runtime. There is no external asset pipeline, LOD system, or baked field-chunk cache yet. Water uses a scrolling texture matrix rather than reflections, and weather is visual-only: it does not yet accumulate snow, create puddles, or affect travel rules.
+- Actor animation is a runtime vector rig, not a sprite-sheet editor. Equipment chooses weapon/shield silhouettes, but there is no paper-doll equipment preview UI. Local NPCs interpolate schedule and click-path changes; they do not yet wander with free-roaming town AI.
+- Graphics quality changes the filter, water motion, weather density, and decorative prop density. Switching quality while a field is already open applies the effects immediately, but a re-entry is the cleanest way to see all prop-density changes.
 - Fast travel is available from the atlas and consumes world time; it is not restricted to strictly discovered road segments yet.
 - Handcrafted Redford, Millbrook, and the Old Mill Crypt have authored local maps and NPCs. Procedural settlements share a generic settlement layout and a generic road trader rather than unique generated towns.
 - NPC schedules are hour-granular and computed from the campaign clock. NPCs do not pathfind between spots; they are placed at the active schedule spot when the local map is viewed.
@@ -240,7 +250,7 @@ The streaming implementation consumes the AI SDK `fullStream` and explicitly han
 
 ## Post-slice roadmap
 
-- More handcrafted travel maps, unique biome layouts, weather, water animation, interiors, and dungeon encounters.
+- More handcrafted travel maps and biome layouts, seasonal weather with ground accumulation, richer water reflections, interiors, and dungeon encounters.
 - Deeper combat: full conditions, reactions, manual companion control, and richer enemy tactics.
 - Travel encounters with patrols, stealth/avoidance, mounted travel, and encounter-specific objectives.
 - More procedural quest templates, faction arcs, companions, and romance content.

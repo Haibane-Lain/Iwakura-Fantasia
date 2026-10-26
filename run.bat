@@ -6,10 +6,11 @@ if /i "%~1"=="--dev" goto dev
 if /i "%~1"=="dev" goto dev
 
 set "PACKAGED=apps\desktop\release\win-unpacked\Iwakura Fantasia.exe"
-if exist "%PACKAGED%" (
+if exist "%PACKAGED%" if exist "apps\desktop\release\win-unpacked\resources\app.asar" if exist "apps\desktop\release\win-unpacked\icudtl.dat" if exist "apps\desktop\release\win-unpacked\resources.pak" (
   start "" "%PACKAGED%"
   exit /b 0
 )
+if exist "%PACKAGED%" echo Packaged build is incomplete. Rebuilding from source...
 
 if not exist "node_modules" (
   echo Dependencies are not installed.

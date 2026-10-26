@@ -45,6 +45,8 @@ export const AppSettingsSchema = z.object({
   highContrast: z.boolean().default(false),
   showTooltips: z.boolean().default(true),
   uiScale: z.number().min(0.8).max(1.5).default(1),
+  graphicsQuality: z.enum(["low", "balanced", "high"]).default("balanced"),
+  weather: z.enum(["auto", "off", "rain", "snow", "fog", "storm"]).default("auto"),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 
@@ -57,6 +59,8 @@ export const SettingsPatchSchema = z.object({
   highContrast: z.boolean().optional(),
   showTooltips: z.boolean().optional(),
   uiScale: z.number().min(0.8).max(1.5).optional(),
+  graphicsQuality: z.enum(["low", "balanced", "high"]).optional(),
+  weather: z.enum(["auto", "off", "rain", "snow", "fog", "storm"]).optional(),
   apiKey: z.string().min(8).max(500).optional(),
   clearApiKey: z.boolean().optional(),
 });

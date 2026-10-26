@@ -25,6 +25,11 @@ const SYSTEMS = [
   ["AI", "The narrator proposes speech and intents. The engine validates every state change."],
   ["Companions", "Recruitable NPCs travel with you, fight on their turns, and react to choices."],
   ["Travel", "Each world hex unfolds into an isometric field. Visible threats start combat on contact."],
+  ["Weather", "Rain, snow, fog, and storms follow time and place. Fix or disable the weather in Settings."],
+  [
+    "Graphics",
+    "Low, balanced, and high presets change water motion, weather density, filters, and decorative props.",
+  ],
   ["Content", "Teen fades romance to black; mature changes tone, not rules."],
 ];
 

@@ -59,25 +59,47 @@ describe("local server", () => {
     const initial = await app.request("/api/settings", { headers: auth });
     expect(initial.status).toBe(200);
     const initialBody = (await initial.json()) as {
-      settings: { ai: { temperature: number; npcModel: string } };
+      settings: {
+        ai: { temperature: number; npcModel: string };
+        graphicsQuality: string;
+        weather: string;
+      };
       apiKeyConfigured: boolean;
     };
     expect(initialBody.apiKeyConfigured).toBe(false);
     expect(initialBody.settings.ai.npcModel).toBe("deepseek-v4.1-flash");
+    expect(initialBody.settings.graphicsQuality).toBe("balanced");
+    expect(initialBody.settings.weather).toBe("auto");
 
     const update = await app.request("/api/settings", {
       method: "PUT",
       headers: { ...auth, "Content-Type": "application/json" },
-      body: JSON.stringify({ ai: { temperature: 0.4, npcModel: "glm-5.3-flash" } }),
+      body: JSON.stringify({
+        ai: { temperature: 0.4, npcModel: "glm-5.3-flash" },
+        graphicsQuality: "high",
+        weather: "rain",
+      }),
     });
     expect(update.status).toBe(200);
-    const updated = (await update.json()) as { settings: { ai: { temperature: number; npcModel: string } } };
+    const updated = (await update.json()) as {
+      settings: {
+        ai: { temperature: number; npcModel: string };
+        graphicsQuality: string;
+        weather: string;
+      };
+    };
     expect(updated.settings.ai.temperature).toBe(0.4);
     expect(updated.settings.ai.npcModel).toBe("glm-5.3-flash");
+    expect(updated.settings.graphicsQuality).toBe("high");
+    expect(updated.settings.weather).toBe("rain");
 
     const reread = await app.request("/api/settings", { headers: auth });
-    const rereadBody = (await reread.json()) as { settings: { ai: { temperature: number } } };
+    const rereadBody = (await reread.json()) as {
+      settings: { ai: { temperature: number }; graphicsQuality: string; weather: string };
+    };
     expect(rereadBody.settings.ai.temperature).toBe(0.4);
+    expect(rereadBody.settings.graphicsQuality).toBe("high");
+    expect(rereadBody.settings.weather).toBe("rain");
   });
 
   it("returns the curated catalog without a key", async () => {

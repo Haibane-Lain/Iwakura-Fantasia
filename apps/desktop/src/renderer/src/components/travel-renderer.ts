@@ -1,16 +1,32 @@
-import { getLocalTile, getPalette } from "@iwakura/content";
+import { getEnemy, getLocalTile } from "@iwakura/content";
 import type { Hex, LocalMap, TravelEnemyGroup } from "@iwakura/contracts";
 import { axialToOffset, hashString, hexToPixel, localTileAt, type Point, pixelToHex } from "@iwakura/engine";
-import { type Application, Container, Graphics, Rectangle } from "pixi.js";
+import { type Application, Container, Graphics, Rectangle, type Sprite } from "pixi.js";
+import {
+  engineFacingToActorFacing,
+  facingFromVector,
+  facingToward,
+} from "../render/iso/actors/actor-appearance";
+import type { ActorAppearanceInput, ActorFacing } from "../render/iso/actors/actor-types";
+import { ActorView } from "../render/iso/actors/actor-view";
+import { AtmosphereFilter } from "../render/iso/atmosphere";
 import { addGatehouse } from "../render/iso/buildings";
 import { followIsoCamera, screenToWorld } from "../render/iso/camera";
 import { IsoLabelLayer, makeLabel } from "../render/iso/labels";
 import { mapIsoBounds, tileHeight, tileVariant, timeTint } from "../render/iso/layout";
-import { addHexSides, addHexTop, addRibbon, MeshBuilder, meshFrom } from "../render/iso/mesh";
+import { addHexSides, addHexTop, addOrganicRibbon, MeshBuilder, meshFrom } from "../render/iso/mesh";
 import { projectHex, projectHexCorners, projectPoint, screenVectorToWorld } from "../render/iso/projection";
-import { addProp, createFigure, type FigureView } from "../render/iso/props";
+import { addProp } from "../render/iso/props";
 import { roadSegments, waterSegments } from "../render/iso/roads";
-import { ribbonTexture, terrainSideTexture, terrainTopColor, tileTexture } from "../render/iso/textures";
+import {
+  animatedWaterTexture,
+  ribbonTexture,
+  terrainSideTexture,
+  terrainTopColor,
+  tileTexture,
+} from "../render/iso/textures";
+import { createShoreline, WaterAnimator } from "../render/iso/water";
+import { type GraphicsQuality, WeatherFx, type WeatherSetting } from "../render/iso/weather";
 
 const HEX_SIZE = 34;
 const WALK_SPEED = 190;
@@ -23,6 +39,12 @@ export interface TravelCompanionMarker {
   id: string;
   name: string;
   palette: string;
+  seed?: string;
+  ancestryId?: string;
+  classId?: string;
+  sigil?: string;
+  mainHand?: string;
+  offHand?: string;
 }
 
 export interface TravelRendererCallbacks {
@@ -32,9 +54,16 @@ export interface TravelRendererCallbacks {
 }
 
 interface CompanionView {
-  figure: FigureView;
+  actor: ActorView;
   label: ReturnType<IsoLabelLayer["add"]>;
   offset: Hex;
+  pixel: Point;
+}
+
+interface EnemyView {
+  actor: ActorView;
+  group: TravelEnemyGroup;
+  originFacing: ActorFacing;
 }
 
 function offsetHex(hex: Hex, q: number, r: number): Hex {
@@ -73,6 +102,12 @@ export class TravelRenderer {
   private readonly objectLayer = new Container();
   private readonly tintLayer = new Graphics();
   private readonly labels: IsoLabelLayer;
+  private readonly water = new WaterAnimator();
+  private readonly weather: WeatherFx;
+  private readonly atmosphere = new AtmosphereFilter();
+  private weatherSetting: WeatherSetting;
+  private graphicsQuality: GraphicsQuality;
+  private readonly weatherSeed: string;
   private readonly keys = new Set<string>();
   private readonly callbacks: TravelRendererCallbacks;
   private readonly tick: (ticker: { deltaMS: number }) => void;
@@ -90,10 +125,14 @@ export class TravelRenderer {
   private elapsed = 0;
   private hour: number;
   private reduceMotion: boolean;
-  private playerFigure!: FigureView;
+  private playerActor!: ActorView;
   private playerLabel!: ReturnType<IsoLabelLayer["add"]>;
   private readonly companionViews: CompanionView[] = [];
-  private readonly figures: FigureView[] = [];
+  private readonly enemyViews: EnemyView[] = [];
+  private readonly actorViews: ActorView[] = [];
+  private readonly windSprites: Sprite[] = [];
+  private readonly partyAppearance: ActorAppearanceInput | undefined;
+  private readonly initialFacing: number;
 
   constructor(
     private readonly app: Application,
@@ -105,6 +144,11 @@ export class TravelRenderer {
     callbacks: TravelRendererCallbacks,
     hour = 12,
     reduceMotion = false,
+    weatherSetting: WeatherSetting = "auto",
+    graphicsQuality: GraphicsQuality = "balanced",
+    weatherSeed = "",
+    partyAppearance?: ActorAppearanceInput,
+    partyFacing = 0,
   ) {
     this.playerHex = partyHex;
     this.playerPixel = hexToPixel(partyHex, HEX_SIZE);
@@ -112,6 +156,12 @@ export class TravelRenderer {
     this.callbacks = callbacks;
     this.hour = hour;
     this.reduceMotion = reduceMotion;
+    this.weatherSetting = weatherSetting;
+    this.graphicsQuality = graphicsQuality;
+    this.weatherSeed = weatherSeed || map.id;
+    this.partyAppearance = partyAppearance;
+    this.initialFacing = partyFacing;
+    this.lastFacing = partyFacing;
 
     this.objectLayer.sortableChildren = true;
     this.app.stage.addChild(this.camera);
@@ -123,6 +173,16 @@ export class TravelRenderer {
       this.objectLayer,
       this.tintLayer,
     );
+    this.weather = new WeatherFx(app, {
+      setting: this.weatherSetting,
+      quality: this.graphicsQuality,
+      mapId: map.id,
+      hour,
+      seed: this.weatherSeed,
+      indoor: false,
+      reduceMotion,
+    });
+    if (this.graphicsQuality !== "low") this.camera.filters = [this.atmosphere];
     this.labels = new IsoLabelLayer(app);
 
     this.drawTerrain();
@@ -157,13 +217,26 @@ export class TravelRenderer {
   setHour(hour: number): void {
     this.hour = hour;
     this.drawTint();
+    this.weather.setWeather(this.weatherSetting, this.map.id, hour, this.weatherSeed, false);
   }
 
   setReduceMotion(reduceMotion: boolean): void {
     this.reduceMotion = reduceMotion;
+    this.weather.setReduceMotion(reduceMotion);
     if (reduceMotion) {
-      for (const figure of this.figures) figure.body.y = 0;
+      for (const sprite of this.windSprites) sprite.rotation = 0;
     }
+  }
+
+  setWeatherSetting(weatherSetting: WeatherSetting): void {
+    this.weatherSetting = weatherSetting;
+    this.weather.setWeather(weatherSetting, this.map.id, this.hour, this.weatherSeed, false);
+  }
+
+  setGraphicsQuality(graphicsQuality: GraphicsQuality): void {
+    this.graphicsQuality = graphicsQuality;
+    this.weather.setQuality(graphicsQuality);
+    this.camera.filters = graphicsQuality === "low" ? [] : [this.atmosphere];
   }
 
   private drawTerrain(): void {
@@ -186,19 +259,30 @@ export class TravelRenderer {
 
     const topGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
     const sideGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
+    const waterGroups = new Map<string, { variant: number; builder: MeshBuilder }>();
 
     for (let row = 0; row < this.map.height; row += 1) {
       for (let col = 0; col < this.map.width; col += 1) {
         const hex = { q: col - Math.floor(row / 2), r: row };
         const tileId = localTileAt(this.map, hex);
         const variant = tileVariant(this.map.id, hex, tileId);
+        const z = tileHeight(tileId);
+        if (tileId === "water") {
+          const key = String(variant);
+          let water = waterGroups.get(key);
+          if (!water) {
+            water = { variant, builder: new MeshBuilder() };
+            waterGroups.set(key, water);
+          }
+          addHexTop(water.builder, hex, HEX_SIZE, z);
+          continue;
+        }
         const key = `${tileId}:${variant}`;
         let top = topGroups.get(key);
         if (!top) {
           top = { tileId, variant, builder: new MeshBuilder() };
           topGroups.set(key, top);
         }
-        const z = tileHeight(tileId);
         addHexTop(top.builder, hex, HEX_SIZE, z);
         if (z > 0) {
           let side = sideGroups.get(key);
@@ -219,11 +303,21 @@ export class TravelRenderer {
       );
       if (mesh) this.terrainLayer.addChild(mesh);
     }
+    for (const group of waterGroups.values()) {
+      const texture = animatedWaterTexture(getLocalTile("water").color, group.variant);
+      this.water.register(texture, group.variant * 1.6);
+      const mesh = meshFrom(group.builder, texture);
+      if (mesh) {
+        mesh.geometry.batchMode = "no-batch";
+        this.terrainLayer.addChild(mesh);
+      }
+    }
     for (const group of sideGroups.values()) {
       const color = getLocalTile(group.tileId).color;
       const mesh = meshFrom(group.builder, terrainSideTexture(group.tileId, color, group.variant));
       if (mesh) this.terrainLayer.addChild(mesh);
     }
+    this.terrainLayer.addChild(createShoreline(this.map, HEX_SIZE));
   }
 
   private drawRoads(): void {
@@ -235,32 +329,33 @@ export class TravelRenderer {
     for (const segment of roadSegments(this.map)) {
       const center = projectHex(segment.from, HEX_SIZE, 0.04);
       const target = projectHex(segment.to, HEX_SIZE, 0.04);
-      addRibbon(roadShadow, center, target, { width: 16 });
-      addRibbon(segment.bridge ? bridgeSurface : roadSurface, center, target, { width: 11 });
+      addOrganicRibbon(roadShadow, center, target, { width: 14.5 });
+      addOrganicRibbon(segment.bridge ? bridgeSurface : roadSurface, center, target, { width: 11 });
     }
     for (const segment of waterSegments(this.map)) {
-      addRibbon(
+      addOrganicRibbon(
         waterSurface,
         projectHex(segment.from, HEX_SIZE, 0.02),
         projectHex(segment.to, HEX_SIZE, 0.02),
-        {
-          width: 26,
-        },
+        { width: 26 },
       );
     }
 
     const shadow = meshFrom(roadShadow, ribbonTexture("road", 0x3f3428));
     if (shadow) {
-      shadow.alpha = 0.72;
+      shadow.alpha = 0.56;
       this.decalLayer.addChild(shadow);
     }
     const road = meshFrom(roadSurface, ribbonTexture("road", getLocalTile("road").color));
     if (road) this.decalLayer.addChild(road);
     const bridge = meshFrom(bridgeSurface, ribbonTexture("road", getLocalTile("bridge").color));
     if (bridge) this.decalLayer.addChild(bridge);
-    const water = meshFrom(waterSurface, ribbonTexture("water", getLocalTile("water").color));
+    const waterTexture = animatedWaterTexture(getLocalTile("water").color, 1);
+    this.water.register(waterTexture, 3.4);
+    const water = meshFrom(waterSurface, waterTexture);
     if (water) {
-      water.alpha = 0.55;
+      water.geometry.batchMode = "no-batch";
+      water.alpha = 0.48;
       this.decalLayer.addChild(water);
     }
   }
@@ -288,11 +383,12 @@ export class TravelRenderer {
               variant: seed % 3,
             });
             sprite.zIndex = point.y;
+            this.windSprites.push(sprite);
           }
-        } else if (tileId === "brush" || tileId === "marsh" || (tileId === "grass" && seed % 7 === 0)) {
+        } else if (tileId === "brush" || tileId === "marsh") {
           const sprite = addProp(
             this.objectLayer,
-            "bush",
+            tileId === "marsh" ? "reeds" : "bush",
             { x: base.x, y: base.y },
             {
               scale: tileId === "marsh" ? 0.34 : 0.28,
@@ -300,6 +396,47 @@ export class TravelRenderer {
             },
           );
           sprite.zIndex = base.y;
+          this.windSprites.push(sprite);
+        } else if (tileId === "grass") {
+          if (this.graphicsQuality !== "low") {
+            if (seed % 2 === 0) {
+              const sprite = addProp(
+                this.objectLayer,
+                "tuft",
+                {
+                  x: base.x + ((seed % 17) - 8) * 0.35,
+                  y: base.y + ((Math.floor(seed / 11) % 9) - 4) * 0.3,
+                },
+                {
+                  scale: 0.2 + ((seed >> 5) % 14) / 100,
+                  variant: seed % 3,
+                },
+              );
+              sprite.zIndex = base.y;
+              this.windSprites.push(sprite);
+            }
+            if (seed % 11 === 0) {
+              const flower = addProp(
+                this.objectLayer,
+                "flowers",
+                { x: base.x + 4, y: base.y - 1 },
+                { scale: 0.24, variant: seed % 3 },
+              );
+              flower.zIndex = base.y + 0.1;
+              this.windSprites.push(flower);
+            }
+          }
+        } else if (tileId === "field" || tileId === "crop") {
+          if (this.graphicsQuality !== "low" && seed % 3 === 0) {
+            const sprite = addProp(
+              this.objectLayer,
+              tileId === "crop" ? "wheat" : "tuft",
+              { x: base.x, y: base.y },
+              { scale: 0.22 + (seed % 7) / 100, variant: seed % 3 },
+            );
+            sprite.zIndex = base.y;
+            this.windSprites.push(sprite);
+          }
         } else if (tileId === "rock" || tileId === "cliff") {
           const sprite = addProp(
             this.objectLayer,
@@ -311,6 +448,15 @@ export class TravelRenderer {
             },
           );
           sprite.zIndex = base.y;
+          if (this.graphicsQuality !== "low" && tileId === "cliff" && seed % 7 === 0) {
+            const mountain = addProp(
+              this.objectLayer,
+              "mountain",
+              { x: base.x, y: base.y - 2 },
+              { scale: 0.55 + (seed % 10) / 100, variant: seed % 3 },
+            );
+            mountain.zIndex = base.y + 0.2;
+          }
         } else if (tileId === "ruin_floor" && seed % 3 === 0) {
           const sprite = addProp(this.objectLayer, seed % 2 === 0 ? "crate" : "rock", base, {
             scale: 0.3,
@@ -386,16 +532,33 @@ export class TravelRenderer {
   }
 
   private drawEnemies(): void {
-    const palette = getPalette("ember");
     for (const group of this.enemies) {
+      const enemy = group.enemyIds.map((id) => getEnemy(id)).find((entry) => Boolean(entry));
       const point = projectHex(group.hex, HEX_SIZE, tileHeight(localTileAt(this.map, group.hex)));
-      const figure = createFigure(palette, { enemy: true, seed: group.id });
-      figure.container.position.set(point.x, point.y);
-      figure.container.zIndex = point.y;
-      this.objectLayer.addChild(figure.container);
-      this.figures.push(figure);
+      const originFacing = engineFacingToActorFacing(group.hex.r + group.hex.q);
+      const actor = new ActorView(
+        {
+          id: group.id,
+          name: group.name,
+          palette: enemy?.palette ?? "ember",
+          seed: group.id,
+          enemyId: enemy?.id ?? group.enemyIds[0],
+          tags: enemy?.tags,
+        },
+        originFacing,
+      );
+      actor.setPosition(point.x, point.y);
+      actor.container.zIndex = point.y;
+      actor.setPresentation({ team: "enemy" });
+      this.objectLayer.addChild(actor.container);
+      this.enemyViews.push({ actor, group, originFacing });
+      this.actorViews.push(actor);
       const label = makeLabel(group.name, { color: 0xe0b0aa, size: 8 });
-      this.labels.add(label, point, { anchorY: 0, offsetY: 10, minZoom: LABEL_ZOOM });
+      this.labels.add(label, point, {
+        anchorY: 1,
+        offsetY: actor.labelOffsetY - 4,
+        minZoom: LABEL_ZOOM,
+      });
 
       const radius = group.aggroRadius * HEX_SIZE * 0.58;
       this.aggroLayer
@@ -406,16 +569,24 @@ export class TravelRenderer {
   }
 
   private drawParty(companions: TravelCompanionMarker[]): void {
-    const palette = getPalette("gold");
     const point = projectHex(this.playerHex, HEX_SIZE, tileHeight(localTileAt(this.map, this.playerHex)));
-    this.playerFigure = createFigure(palette, { seed: this.partyName });
-    this.playerFigure.container.position.set(point.x, point.y);
-    this.playerFigure.container.zIndex = point.y;
-    this.objectLayer.addChild(this.playerFigure.container);
-    this.figures.push(this.playerFigure);
+    this.playerActor = new ActorView(
+      this.partyAppearance ?? {
+        id: this.partyName,
+        name: this.partyName,
+        palette: "gold",
+        seed: this.partyName,
+      },
+      engineFacingToActorFacing(this.initialFacing),
+    );
+    this.playerActor.setPosition(point.x, point.y);
+    this.playerActor.container.zIndex = point.y;
+    this.playerActor.setPresentation({ team: "friendly" });
+    this.objectLayer.addChild(this.playerActor.container);
+    this.actorViews.push(this.playerActor);
     this.playerLabel = this.labels.add(makeLabel(this.partyName, { color: 0xf5e6c8, size: 9 }), point, {
-      anchorY: 0,
-      offsetY: 10,
+      anchorY: 1,
+      offsetY: this.playerActor.labelOffsetY - 4,
       minZoom: LABEL_ZOOM,
     });
 
@@ -426,25 +597,39 @@ export class TravelRenderer {
     ];
     for (const [index, companion] of companions.entries()) {
       const offset = offsets[index % offsets.length]!;
-      const companionPalette = getPalette(companion.palette);
-      const figure = createFigure(companionPalette, { companion: true, seed: companion.id });
       const hex = offsetHex(this.playerHex, offset.q, offset.r);
       const companionPoint = projectHex(hex, HEX_SIZE, tileHeight(localTileAt(this.map, hex)));
-      figure.container.position.set(companionPoint.x, companionPoint.y);
-      figure.container.zIndex = companionPoint.y;
-      this.objectLayer.addChild(figure.container);
-      this.figures.push(figure);
+      const actor = new ActorView(
+        {
+          id: companion.id,
+          name: companion.name,
+          palette: companion.palette,
+          seed: companion.seed,
+          ancestryId: companion.ancestryId,
+          classId: companion.classId,
+          sigil: companion.sigil,
+          mainHand: companion.mainHand,
+          offHand: companion.offHand,
+          role: "companion",
+        },
+        engineFacingToActorFacing(this.initialFacing),
+      );
+      actor.setPosition(companionPoint.x, companionPoint.y);
+      actor.container.zIndex = companionPoint.y;
+      actor.setPresentation({ team: "friendly" });
+      this.objectLayer.addChild(actor.container);
+      this.actorViews.push(actor);
       const initials = companion.name
         .split(/\s+/)
         .slice(0, 2)
         .map((part) => part[0] ?? "")
         .join("");
       const label = this.labels.add(makeLabel(initials, { color: 0xf0e7d2, size: 7 }), companionPoint, {
-        anchorY: 0,
-        offsetY: 9,
+        anchorY: 1,
+        offsetY: actor.labelOffsetY - 4,
         minZoom: LABEL_ZOOM,
       });
-      this.companionViews.push({ figure, label, offset });
+      this.companionViews.push({ actor, label, offset, pixel: { ...companionPoint } });
     }
   }
 
@@ -496,6 +681,8 @@ export class TravelRenderer {
     if (this.keys.has("w")) screenY -= 1;
     if (this.keys.has("s")) screenY += 1;
 
+    const beforeX = this.playerPixel.x;
+    const beforeY = this.playerPixel.y;
     if (screenX !== 0 || screenY !== 0) {
       const length = Math.hypot(screenX, screenY);
       const speed = this.keys.has("shift") ? SPRINT_SPEED : WALK_SPEED;
@@ -518,30 +705,75 @@ export class TravelRenderer {
       const facing = nearestFacing(worldDelta.x, worldDelta.y);
       if (facing !== this.lastFacing) {
         this.lastFacing = facing;
-        this.playerFigure.body.scale.x = facing >= 3 ? -1 : 1;
         this.callbacks.onFacing(facing);
       }
+      this.playerActor.setFacing(facingFromVector(screenX, screenY, this.playerActor.currentFacing));
     }
+
+    const moved = Math.hypot(this.playerPixel.x - beforeX, this.playerPixel.y - beforeY);
+    const playerSpeed = deltaMS > 0 && moved > 0.01 ? Math.min(SPRINT_SPEED, moved / (deltaMS / 1000)) : 0;
+    this.playerActor.setMotion(playerSpeed, this.playerActor.currentFacing);
 
     const tileId = localTileAt(this.map, this.playerHex);
     const playerPoint = projectPoint(this.playerPixel, tileHeight(tileId));
-    this.playerFigure.container.position.set(playerPoint.x, playerPoint.y);
-    this.playerFigure.container.zIndex = playerPoint.y;
+    this.playerActor.setPosition(playerPoint.x, playerPoint.y);
+    this.playerActor.container.zIndex = playerPoint.y;
     this.labels.setPoint(this.playerLabel, playerPoint);
 
+    const companionStep = ((this.keys.has("shift") ? 255 : 178) * Math.min(deltaMS, 50)) / 1000;
     for (const view of this.companionViews) {
       const hex = offsetHex(this.playerHex, view.offset.q, view.offset.r);
-      const point = projectHex(hex, HEX_SIZE, tileHeight(localTileAt(this.map, hex)));
-      view.figure.container.position.set(point.x, point.y);
-      view.figure.container.zIndex = point.y;
-      this.labels.setPoint(view.label, point);
+      const target = projectHex(hex, HEX_SIZE, tileHeight(localTileAt(this.map, hex)));
+      const dx = target.x - view.pixel.x;
+      const dy = target.y - view.pixel.y;
+      const distance = Math.hypot(dx, dy);
+      let speed = 0;
+      if (distance > 150) {
+        view.pixel = { ...target };
+      } else if (distance > 0.6) {
+        const step = Math.min(distance, companionStep);
+        view.pixel = {
+          x: view.pixel.x + (dx / distance) * step,
+          y: view.pixel.y + (dy / distance) * step,
+        };
+        speed = companionStep > 0 ? Math.min(255, (step / Math.max(deltaMS, 1)) * 1000) : 0;
+        view.actor.setFacing(facingFromVector(dx, dy, view.actor.currentFacing));
+      }
+      view.actor.setMotion(speed, view.actor.currentFacing);
+      view.actor.setPosition(view.pixel.x, view.pixel.y);
+      view.actor.container.zIndex = view.pixel.y;
+      this.labels.setPoint(view.label, view.pixel);
     }
 
-    if (!this.reduceMotion) {
-      for (const figure of this.figures) {
-        figure.body.y = Math.sin(this.elapsed * 0.003 + figure.phase) * 0.8;
+    for (const view of this.enemyViews) {
+      const dx = playerPoint.x - view.actor.container.x;
+      const dy = playerPoint.y - view.actor.container.y;
+      const near = Math.hypot(dx, dy) <= view.group.aggroRadius * HEX_SIZE * 0.72;
+      view.actor.setPresentation({ team: "enemy", aggro: near });
+      view.actor.setFacing(
+        near
+          ? facingToward(view.actor.container.position, playerPoint, view.originFacing)
+          : view.originFacing,
+      );
+      view.actor.setMotion(0);
+    }
+
+    for (const actor of this.actorViews) {
+      actor.update(deltaMS, this.reduceMotion, this.graphicsQuality);
+    }
+
+    if (!this.reduceMotion && this.graphicsQuality !== "low") {
+      for (const sprite of this.windSprites) {
+        sprite.rotation = Math.sin(this.elapsed * 0.0011 + sprite.x * 0.031 + sprite.y * 0.013) * 0.022;
       }
     }
+    this.water.update(this.elapsed, this.reduceMotion || this.graphicsQuality === "low");
+    this.weather.update(deltaMS);
+    this.atmosphere.setMood(
+      this.elapsed / 1000,
+      this.reduceMotion ? 0.12 : this.graphicsQuality === "high" ? 0.24 : 0.2,
+      this.reduceMotion ? 0 : this.graphicsQuality === "high" ? 0.015 : 0.01,
+    );
 
     const hex = pixelToHex(this.playerPixel, HEX_SIZE);
     if (hex.q !== this.playerHex.q || hex.r !== this.playerHex.r) {
@@ -574,6 +806,7 @@ export class TravelRenderer {
 
   handleResize(): void {
     this.app.stage.hitArea = new Rectangle(0, 0, this.app.screen.width, this.app.screen.height);
+    this.weather.resize();
     this.focusCamera();
   }
 
@@ -637,6 +870,9 @@ export class TravelRenderer {
     window.removeEventListener("keydown", this.keyDown);
     window.removeEventListener("keyup", this.keyUp);
     this.app.canvas.removeEventListener("wheel", this.wheelHandler);
+    this.water.clear();
+    this.weather.destroy();
+    this.atmosphere.destroy();
     this.labels.destroy();
     this.app.destroy({ removeView: true }, { children: true });
   }

@@ -1,4 +1,4 @@
-import { getNpcDefinition } from "@iwakura/content";
+﻿import { getNpcDefinition } from "@iwakura/content";
 import type { GameState, Hex, LocalBuilding, LocalEncounter } from "@iwakura/contracts";
 import {
   advanceTime,
@@ -65,6 +65,7 @@ export function LocalScreen() {
 
   const [selectedHex, setSelectedHex] = useState<Hex | null>(campaign?.local?.position ?? null);
   const [hoverHex, setHoverHex] = useState<Hex | null>(null);
+  const [partyPath, setPartyPath] = useState<{ mapId: string; path: Hex[] } | null>(null);
   const [toast, setToast] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const [dialogueNpcId, setDialogueNpcId] = useState<string | null>(null);
   const [dialogueNodeId, setDialogueNodeId] = useState<string | null>(null);
@@ -127,6 +128,11 @@ export function LocalScreen() {
         hex: entry.hex,
         palette: entry.npc.palette,
         activity: entry.schedule.activity,
+        seed: entry.npc.id,
+        ancestryId: entry.npc.ancestryId,
+        role: entry.npc.role,
+        archetype: entry.npc.persona.archetype,
+        sigil: entry.npc.sigil,
       })),
     [presences],
   );
@@ -167,10 +173,11 @@ export function LocalScreen() {
       return;
     }
     setSelectedHex(hex);
+    setPartyPath({ mapId: local.map.id, path: result.path });
     persist(result.state);
     if (result.encounter) {
       setPendingEncounter(result.encounter);
-      notify(`${result.encounter.name} — decide whether to fight or avoid.`, "warn");
+      notify(`${result.encounter.name} â€” decide whether to fight or avoid.`, "warn");
       return;
     }
     if (localExitAt(result.state, hex)) {
@@ -263,6 +270,32 @@ export function LocalScreen() {
           npcs={markers}
           hour={campaign.clock.hour}
           reduceMotion={settings?.settings.reduceMotion ?? false}
+          weatherSetting={settings?.settings.weather ?? "auto"}
+          graphicsQuality={settings?.settings.graphicsQuality ?? "balanced"}
+          weatherSeed={campaign.world.seed}
+          partyAppearance={
+            player
+              ? {
+                  id: player.id,
+                  name: player.name,
+                  palette: player.appearance?.palette ?? "gold",
+                  seed: player.appearance?.seed,
+                  ancestryId: player.ancestryId,
+                  classId: player.classId,
+                  sigil: player.appearance?.sigil,
+                  mainHand: player.equipment.mainHand,
+                  offHand: player.equipment.offHand,
+                }
+              : undefined
+          }
+          partyStatus={{
+            hpRatio: player ? player.hp.current / player.hp.max : 1,
+            conditions: player?.conditions ?? [],
+            defeated: false,
+            active: false,
+          }}
+          partyPath={partyPath?.mapId === local.map.id ? partyPath.path : undefined}
+          focusNpcId={dialogueNpcId ?? selectedNpc?.npc.id ?? null}
           onSelect={(hex) => {
             const npc = npcAtLocalHex(campaign, hex);
             setSelectedHex(hex);
@@ -296,7 +329,7 @@ export function LocalScreen() {
               <span className="chip border-gold/20 text-[9px] text-gold/60">M8</span>
             </div>
             <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-faint">
-              {campaign.world.name} · {map.width}×{map.height}
+              {campaign.world.name} Â· {map.width}Ã—{map.height}
             </div>
             {player ? (
               <button
@@ -305,7 +338,7 @@ export function LocalScreen() {
                 onClick={() => setSheetOpen(true)}
               >
                 <UserRound className="size-2.5" />
-                {player.name} · HP {player.hp.current}/{player.hp.max} · AC {player.ac}
+                {player.name} Â· HP {player.hp.current}/{player.hp.max} Â· AC {player.ac}
               </button>
             ) : null}
           </div>
@@ -336,7 +369,7 @@ export function LocalScreen() {
             />
             <div>
               <div className="text-[11px] text-parchment-dim">
-                {campaignSaveState === "saving" ? "Saving…" : "Local save"}
+                {campaignSaveState === "saving" ? "Savingâ€¦" : "Local save"}
               </div>
               <div className="text-[9px] uppercase tracking-[0.12em] text-faint">autosave</div>
             </div>
@@ -349,7 +382,7 @@ export function LocalScreen() {
           <div className="flex items-center gap-2 text-[10px] text-muted">
             <Footprints className="size-3.5 text-gold/60" />
             <span>
-              WASD/QE walk · click a hex · scroll to zoom ·{" "}
+              WASD/QE walk Â· click a hex Â· scroll to zoom Â·{" "}
               {extra ? `${extra.name} under cursor` : "inspect the town"}
             </span>
           </div>
@@ -488,7 +521,7 @@ export function LocalScreen() {
                   aria-label={`Rest at ${selectedBuilding.name}`}
                 >
                   <BedDouble className="size-3.5" />
-                  Rest · 1 gp
+                  Rest Â· 1 gp
                 </button>
               ) : null}
             </div>

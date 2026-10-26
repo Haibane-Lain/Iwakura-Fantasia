@@ -1,16 +1,40 @@
-import { getLocalTile, getPalette } from "@iwakura/content";
+﻿import { getLocalTile } from "@iwakura/content";
 import type { Hex, LocalMap } from "@iwakura/contracts";
 import { axialToOffset, findPath, hashString, hexToPixel, localTileAt, pixelToHex } from "@iwakura/engine";
-import { type Application, Container, type FederatedPointerEvent, Graphics, Rectangle } from "pixi.js";
+import {
+  type Application,
+  Container,
+  type FederatedPointerEvent,
+  Graphics,
+  Rectangle,
+  type Sprite,
+} from "pixi.js";
+import { facingFromVector, facingToward } from "../render/iso/actors/actor-appearance";
+import type {
+  ActorAppearanceInput,
+  ActorPresentation,
+  ActorVisualCue,
+  PartyActorStatus,
+} from "../render/iso/actors/actor-types";
+import { ActorView } from "../render/iso/actors/actor-view";
+import { AtmosphereFilter } from "../render/iso/atmosphere";
 import { addBuildingVisuals, type BuildingVisual } from "../render/iso/buildings";
 import { clampIsoCamera, fitIsoCamera, screenToWorld } from "../render/iso/camera";
 import { IsoLabelLayer, type LabelEntry, makeLabel } from "../render/iso/labels";
 import { mapIsoBounds, tileHeight, tileVariant, timeTint } from "../render/iso/layout";
-import { addHexSides, addHexTop, addRibbon, MeshBuilder, meshFrom } from "../render/iso/mesh";
+import { addHexSides, addHexTop, addOrganicRibbon, MeshBuilder, meshFrom } from "../render/iso/mesh";
 import { type IsoPoint, projectHex, projectHexCorners, projectPoint } from "../render/iso/projection";
-import { addProp, createFigure, type FigureView } from "../render/iso/props";
+import { addProp } from "../render/iso/props";
 import { roadSegments, waterSegments } from "../render/iso/roads";
-import { ribbonTexture, terrainSideTexture, terrainTopColor, tileTexture } from "../render/iso/textures";
+import {
+  animatedWaterTexture,
+  ribbonTexture,
+  terrainSideTexture,
+  terrainTopColor,
+  tileTexture,
+} from "../render/iso/textures";
+import { createShoreline, WaterAnimator } from "../render/iso/water";
+import { type GraphicsQuality, WeatherFx, type WeatherSetting } from "../render/iso/weather";
 
 const HEX_SIZE = 34;
 const LABEL_ZOOM = 0.38;
@@ -23,6 +47,36 @@ export interface LocalNpcMarker {
   activity: string;
   kind?: "npc" | "enemy" | "companion";
   active?: boolean;
+  selected?: boolean;
+  defeated?: boolean;
+  conditions?: string[];
+  hp?: number;
+  maxHp?: number;
+  seed?: string;
+  ancestryId?: string;
+  classId?: string;
+  role?: string;
+  archetype?: string;
+  sigil?: string;
+  mainHand?: string;
+  offHand?: string;
+}
+
+interface LocalActorRecord {
+  key: string;
+  view: ActorView;
+  label: LabelEntry;
+  markerId: string;
+  kind: "npc" | "enemy" | "companion" | "party";
+  hex: Hex;
+  pixel: IsoPoint;
+  target: IsoPoint;
+  path: IsoPoint[] | null;
+  pathIndex: number;
+  lastHp?: number;
+  defeated: boolean;
+  appearanceKey: string;
+  presentation: ActorPresentation;
 }
 
 export interface LocalRendererCallbacks {
@@ -40,13 +94,19 @@ export class LocalRenderer {
   private readonly objectLayer = new Container();
   private readonly tintLayer = new Graphics();
   private readonly labels: IsoLabelLayer;
+  private readonly water = new WaterAnimator();
+  private readonly weather: WeatherFx;
+  private readonly atmosphere = new AtmosphereFilter();
   private readonly callbacks: LocalRendererCallbacks;
+  private weatherSetting: WeatherSetting;
+  private graphicsQuality: GraphicsQuality;
+  private readonly weatherSeed: string;
   private mapBounds: ReturnType<typeof mapIsoBounds>;
   private readonly wheelHandler: (event: WheelEvent) => void;
   private readonly tick: (ticker: { deltaMS: number }) => void;
-  private unitContainers: Container[] = [];
-  private unitLabels: LabelEntry[] = [];
-  private figures: FigureView[] = [];
+  private readonly actors = new Map<string, LocalActorRecord>();
+  private partyRecord: LocalActorRecord | null = null;
+  private readonly windSprites: Sprite[] = [];
   private buildingVisuals: BuildingVisual[] = [];
   private hoverHex: Hex | null = null;
   private dragging = false;
@@ -57,7 +117,10 @@ export class LocalRenderer {
   private elapsed = 0;
   private hour: number;
   private partyActive = false;
-  private partyRing: Graphics | null = null;
+  private partyStatus: PartyActorStatus = {};
+  private focusNpcId: string | null = null;
+  private partyPathKey = "";
+  private readonly partyAppearance: ActorAppearanceInput | undefined;
   private reduceMotion: boolean;
   private destroyed = false;
 
@@ -70,12 +133,22 @@ export class LocalRenderer {
     hour = 12,
     partyActive = false,
     reduceMotion = false,
+    weatherSetting: WeatherSetting = "auto",
+    graphicsQuality: GraphicsQuality = "balanced",
+    weatherSeed = "",
+    partyAppearance?: ActorAppearanceInput,
+    partyStatus?: PartyActorStatus,
   ) {
     this.map = map;
     this.partyHex = partyHex;
     this.hour = hour;
     this.partyActive = partyActive;
+    this.partyStatus = { ...partyStatus, active: partyActive };
     this.reduceMotion = reduceMotion;
+    this.weatherSetting = weatherSetting;
+    this.graphicsQuality = graphicsQuality;
+    this.weatherSeed = weatherSeed || map.id;
+    this.partyAppearance = partyAppearance;
     this.mapBounds = mapIsoBounds(map, HEX_SIZE, 56);
     this.callbacks = callbacks;
 
@@ -88,6 +161,16 @@ export class LocalRenderer {
       this.objectLayer,
       this.tintLayer,
     );
+    this.weather = new WeatherFx(app, {
+      setting: this.weatherSetting,
+      quality: this.graphicsQuality,
+      mapId: map.id,
+      hour,
+      seed: this.weatherSeed,
+      indoor: map.kind === "dungeon",
+      reduceMotion,
+    });
+    if (this.graphicsQuality !== "low") this.camera.filters = [this.atmosphere];
     this.labels = new IsoLabelLayer(app);
 
     this.buildStatic();
@@ -99,11 +182,19 @@ export class LocalRenderer {
     this.tick = (ticker) => {
       if (this.destroyed) return;
       this.elapsed += ticker.deltaMS;
-      if (!this.reduceMotion) {
-        for (const figure of this.figures) {
-          figure.body.y = Math.sin(this.elapsed * 0.003 + figure.phase) * 0.7;
+      this.updateActors(ticker.deltaMS);
+      if (!this.reduceMotion && this.graphicsQuality !== "low") {
+        for (const sprite of this.windSprites) {
+          sprite.rotation = Math.sin(this.elapsed * 0.0011 + sprite.x * 0.031 + sprite.y * 0.013) * 0.02;
         }
       }
+      this.water.update(this.elapsed, this.reduceMotion || this.graphicsQuality === "low");
+      this.weather.update(ticker.deltaMS);
+      this.atmosphere.setMood(
+        this.elapsed / 1000,
+        this.reduceMotion ? 0.12 : this.graphicsQuality === "high" ? 0.24 : 0.2,
+        this.reduceMotion ? 0 : this.graphicsQuality === "high" ? 0.015 : 0.01,
+      );
       this.labels.update(this.camera);
     };
     this.app.ticker.add(this.tick);
@@ -112,19 +203,87 @@ export class LocalRenderer {
   setHour(hour: number): void {
     this.hour = hour;
     this.drawTint();
+    this.weather.setWeather(
+      this.weatherSetting,
+      this.map.id,
+      hour,
+      this.weatherSeed,
+      this.map.kind === "dungeon",
+    );
+  }
+
+  setWeatherSetting(weatherSetting: WeatherSetting): void {
+    this.weatherSetting = weatherSetting;
+    this.weather.setWeather(
+      weatherSetting,
+      this.map.id,
+      this.hour,
+      this.weatherSeed,
+      this.map.kind === "dungeon",
+    );
+  }
+
+  setGraphicsQuality(graphicsQuality: GraphicsQuality): void {
+    this.graphicsQuality = graphicsQuality;
+    this.weather.setQuality(graphicsQuality);
+    this.camera.filters = graphicsQuality === "low" ? [] : [this.atmosphere];
   }
 
   setPartyActive(active: boolean): void {
     if (this.partyActive === active) return;
     this.partyActive = active;
-    this.drawPartyRing();
+    this.partyStatus = { ...this.partyStatus, active };
+    this.applyPartyPresentation();
+  }
+
+  setPartyStatus(status: PartyActorStatus): void {
+    const previous = this.partyStatus;
+    this.partyStatus = { ...status, active: this.partyActive || status.active };
+    if (
+      this.partyRecord &&
+      status.hpRatio !== undefined &&
+      previous.hpRatio !== undefined &&
+      status.hpRatio < previous.hpRatio - 0.001
+    ) {
+      this.partyRecord.view.playCue("hurt");
+    }
+    if (this.partyRecord && status.defeated && !previous.defeated) {
+      this.partyRecord.view.playCue("death");
+    }
+    this.applyPartyPresentation();
+  }
+
+  setFocusNpc(id: string | null): void {
+    if (this.focusNpcId === id) return;
+    this.focusNpcId = id;
+    for (const record of this.actors.values()) {
+      if (record.kind === "npc" || record.kind === "companion") {
+        record.view.setPresentation(this.presentationFor(record, this.focusNpcId === record.markerId));
+      }
+    }
   }
 
   setReduceMotion(reduceMotion: boolean): void {
     this.reduceMotion = reduceMotion;
+    this.weather.setReduceMotion(reduceMotion);
     if (reduceMotion) {
-      for (const figure of this.figures) figure.body.y = 0;
+      for (const sprite of this.windSprites) sprite.rotation = 0;
     }
+  }
+
+  playCue(cue: ActorVisualCue): void {
+    const actor = cue.actorId === "party" ? this.partyRecord : this.actors.get(this.keyFor(cue.actorId));
+    if (!actor) return;
+    const target =
+      cue.targetId === "party"
+        ? this.partyRecord
+        : cue.targetId
+          ? this.actors.get(this.keyFor(cue.targetId))
+          : undefined;
+    const facing = target
+      ? facingToward(actor.pixel, target.pixel, actor.view.currentFacing)
+      : actor.view.currentFacing;
+    actor.view.playCue(cue.kind, facing);
   }
 
   private clearLayer(layer: Container): void {
@@ -135,6 +294,7 @@ export class LocalRenderer {
     this.clearLayer(this.terrainLayer);
     this.clearLayer(this.decalLayer);
     this.clearLayer(this.objectLayer);
+    this.windSprites.length = 0;
     this.buildingVisuals = [];
 
     const background = new Graphics();
@@ -156,18 +316,29 @@ export class LocalRenderer {
 
     const topGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
     const sideGroups = new Map<string, { tileId: string; variant: number; builder: MeshBuilder }>();
+    const waterGroups = new Map<string, { variant: number; builder: MeshBuilder }>();
     for (let row = 0; row < this.map.height; row += 1) {
       for (let col = 0; col < this.map.width; col += 1) {
         const hex = { q: col - Math.floor(row / 2), r: row };
         const tileId = localTileAt(this.map, hex);
         const variant = tileVariant(this.map.id, hex, tileId);
+        const z = tileHeight(tileId);
+        if (tileId === "water") {
+          const key = String(variant);
+          let water = waterGroups.get(key);
+          if (!water) {
+            water = { variant, builder: new MeshBuilder() };
+            waterGroups.set(key, water);
+          }
+          addHexTop(water.builder, hex, HEX_SIZE, z);
+          continue;
+        }
         const key = `${tileId}:${variant}`;
         let top = topGroups.get(key);
         if (!top) {
           top = { tileId, variant, builder: new MeshBuilder() };
           topGroups.set(key, top);
         }
-        const z = tileHeight(tileId);
         addHexTop(top.builder, hex, HEX_SIZE, z);
         if (z > 0) {
           let side = sideGroups.get(key);
@@ -187,11 +358,21 @@ export class LocalRenderer {
       );
       if (mesh) this.terrainLayer.addChild(mesh);
     }
+    for (const group of waterGroups.values()) {
+      const texture = animatedWaterTexture(getLocalTile("water").color, group.variant);
+      this.water.register(texture, group.variant * 1.6);
+      const mesh = meshFrom(group.builder, texture);
+      if (mesh) {
+        mesh.geometry.batchMode = "no-batch";
+        this.terrainLayer.addChild(mesh);
+      }
+    }
     for (const group of sideGroups.values()) {
       const color = getLocalTile(group.tileId).color;
       const mesh = meshFrom(group.builder, terrainSideTexture(group.tileId, color, group.variant));
       if (mesh) this.terrainLayer.addChild(mesh);
     }
+    this.terrainLayer.addChild(createShoreline(this.map, HEX_SIZE));
 
     this.drawRoads();
     this.drawProps();
@@ -222,24 +403,30 @@ export class LocalRenderer {
     for (const segment of roadSegments(this.map)) {
       const from = projectHex(segment.from, HEX_SIZE, 0.04);
       const to = projectHex(segment.to, HEX_SIZE, 0.04);
-      addRibbon(shadow, from, to, { width: 16 });
-      addRibbon(road, from, to, { width: 11 });
+      addOrganicRibbon(shadow, from, to, { width: 14.5 });
+      addOrganicRibbon(road, from, to, { width: 11 });
     }
     for (const segment of waterSegments(this.map)) {
-      addRibbon(water, projectHex(segment.from, HEX_SIZE, 0.02), projectHex(segment.to, HEX_SIZE, 0.02), {
-        width: 25,
-      });
+      addOrganicRibbon(
+        water,
+        projectHex(segment.from, HEX_SIZE, 0.02),
+        projectHex(segment.to, HEX_SIZE, 0.02),
+        { width: 25 },
+      );
     }
     const shadowMesh = meshFrom(shadow, ribbonTexture("road", 0x3f3428));
     if (shadowMesh) {
-      shadowMesh.alpha = 0.7;
+      shadowMesh.alpha = 0.56;
       this.decalLayer.addChild(shadowMesh);
     }
     const roadMesh = meshFrom(road, ribbonTexture("road", getLocalTile("road").color));
     if (roadMesh) this.decalLayer.addChild(roadMesh);
-    const waterMesh = meshFrom(water, ribbonTexture("water", getLocalTile("water").color));
+    const waterTexture = animatedWaterTexture(getLocalTile("water").color, 1);
+    this.water.register(waterTexture, 3.4);
+    const waterMesh = meshFrom(water, waterTexture);
     if (waterMesh) {
-      waterMesh.alpha = 0.5;
+      waterMesh.geometry.batchMode = "no-batch";
+      waterMesh.alpha = 0.44;
       this.decalLayer.addChild(waterMesh);
     }
   }
@@ -266,19 +453,63 @@ export class LocalRenderer {
               variant: seed % 3,
             });
             sprite.zIndex = point.y;
+            this.windSprites.push(sprite);
           }
         } else if (tileId === "brush" || tileId === "marsh") {
-          const sprite = addProp(this.objectLayer, "bush", base, {
+          const sprite = addProp(this.objectLayer, tileId === "marsh" ? "reeds" : "bush", base, {
             scale: tileId === "marsh" ? 0.3 : 0.26,
             variant: seed % 3,
           });
           sprite.zIndex = base.y;
+          this.windSprites.push(sprite);
+        } else if (tileId === "grass") {
+          if (this.graphicsQuality !== "low") {
+            if (seed % 2 === 0) {
+              const sprite = addProp(
+                this.objectLayer,
+                "tuft",
+                {
+                  x: base.x + ((seed % 15) - 7) * 0.35,
+                  y: base.y + ((Math.floor(seed / 9) % 7) - 3) * 0.3,
+                },
+                { scale: 0.2 + ((seed >> 4) % 12) / 100, variant: seed % 3 },
+              );
+              sprite.zIndex = base.y;
+              this.windSprites.push(sprite);
+            }
+            if (seed % 9 === 0) {
+              const flower = addProp(
+                this.objectLayer,
+                "flowers",
+                { x: base.x + 3, y: base.y - 1 },
+                { scale: 0.24, variant: seed % 3 },
+              );
+              flower.zIndex = base.y + 0.1;
+              this.windSprites.push(flower);
+            }
+          }
+        } else if (tileId === "field" || tileId === "crop") {
+          if (this.graphicsQuality !== "low" && seed % 3 === 0) {
+            const sprite = addProp(this.objectLayer, tileId === "crop" ? "wheat" : "tuft", base, {
+              scale: 0.22 + (seed % 7) / 100,
+              variant: seed % 3,
+            });
+            sprite.zIndex = base.y;
+            this.windSprites.push(sprite);
+          }
         } else if (tileId === "rock" || tileId === "cliff") {
           const sprite = addProp(this.objectLayer, "rock", base, {
             scale: tileId === "cliff" ? 0.72 : 0.56,
             variant: seed % 3,
           });
           sprite.zIndex = base.y;
+          if (this.graphicsQuality !== "low" && tileId === "cliff" && seed % 8 === 0) {
+            const mountain = addProp(this.objectLayer, "mountain", base, {
+              scale: 0.5 + (seed % 10) / 100,
+              variant: seed % 3,
+            });
+            mountain.zIndex = base.y + 0.2;
+          }
         } else if (tileId === "crate") {
           const sprite = addProp(this.objectLayer, seed % 2 === 0 ? "crate" : "barrel", base, {
             scale: 0.36,
@@ -446,83 +677,251 @@ export class LocalRenderer {
       .fill({ color: tint.color, alpha: tint.alpha });
   }
 
-  private clearUnits(): void {
-    for (const container of this.unitContainers) {
-      this.objectLayer.removeChild(container);
-      container.destroy({ children: true });
-    }
-    this.unitContainers = [];
-    for (const label of this.unitLabels) this.labels.remove(label);
-    this.unitLabels = [];
-    this.figures = [];
-    this.partyRing = null;
+  private keyFor(id: string): string {
+    return `npc:${id}`;
   }
 
-  private drawNpc(npc: LocalNpcMarker): void {
-    const point = projectHex(npc.hex, HEX_SIZE, tileHeight(localTileAt(this.map, npc.hex)));
-    const palette = getPalette(npc.palette);
-    const figure = createFigure(palette, {
-      enemy: npc.kind === "enemy",
-      companion: npc.kind === "companion",
-      seed: npc.id,
-    });
-    figure.container.position.set(point.x, point.y);
-    figure.container.zIndex = point.y;
-    this.objectLayer.addChild(figure.container);
-    this.unitContainers.push(figure.container);
-    this.figures.push(figure);
+  private appearanceInputFor(marker: LocalNpcMarker): ActorAppearanceInput {
+    return {
+      id: marker.id,
+      name: marker.name,
+      palette: marker.palette,
+      seed: marker.seed ?? marker.id,
+      ancestryId: marker.ancestryId,
+      classId: marker.classId,
+      role: marker.role,
+      archetype: marker.archetype,
+      sigil: marker.sigil,
+      mainHand: marker.mainHand,
+      offHand: marker.offHand,
+      enemyId: marker.kind === "enemy" ? marker.id : undefined,
+    };
+  }
 
-    if (npc.active) {
-      const ring = new Graphics();
-      ring.ellipse(point.x, point.y, 15, 6).stroke({ color: 0xe8c987, width: 2, alpha: 0.9 });
-      ring.zIndex = point.y - 0.1;
-      this.objectLayer.addChild(ring);
-      this.unitContainers.push(ring);
-    }
+  private appearanceKeyFor(marker: LocalNpcMarker): string {
+    return [
+      marker.palette,
+      marker.seed,
+      marker.ancestryId,
+      marker.classId,
+      marker.role,
+      marker.archetype,
+      marker.sigil,
+      marker.mainHand,
+      marker.offHand,
+      marker.kind,
+    ].join("|");
+  }
 
-    const label = makeLabel(npc.name, {
-      color: npc.kind === "enemy" ? 0xe0b0aa : 0xe9dfc8,
-      size: 8,
+  private createRecord(
+    markerId: string,
+    kind: LocalActorRecord["kind"],
+    name: string,
+    point: IsoPoint,
+    appearanceKey: string,
+    appearance: ActorAppearanceInput,
+  ): LocalActorRecord {
+    const view = new ActorView(appearance, "s");
+    view.setPosition(point.x, point.y);
+    const label = makeLabel(name, {
+      color: kind === "enemy" ? 0xe0b0aa : 0xf0e7d2,
+      size: kind === "party" ? 8 : 8,
     });
-    const stagger = (hashString(npc.id) % 3) * 7;
+    const stagger = kind === "party" ? 0 : (hashString(markerId) % 3) * 4;
     const entry = this.labels.add(label, point, {
       anchorY: 1,
-      offsetY: -40 - stagger,
+      offsetY: view.labelOffsetY - 5 - stagger,
       minZoom: LABEL_ZOOM,
     });
-    this.unitLabels.push(entry);
+    view.container.zIndex = point.y;
+    this.objectLayer.addChild(view.container);
+    return {
+      key: this.keyFor(markerId),
+      view,
+      label: entry,
+      markerId,
+      kind,
+      hex: { q: 0, r: 0 },
+      pixel: { ...point },
+      target: { ...point },
+      path: null,
+      pathIndex: 0,
+      defeated: false,
+      appearanceKey,
+      presentation: {},
+    };
   }
 
-  private drawParty(): void {
-    const point = projectHex(this.partyHex, HEX_SIZE, tileHeight(localTileAt(this.map, this.partyHex)));
-    const palette = getPalette("gold");
-    const figure = createFigure(palette, { seed: "party" });
-    figure.container.position.set(point.x, point.y);
-    figure.container.zIndex = point.y;
-    this.objectLayer.addChild(figure.container);
-    this.unitContainers.push(figure.container);
-    this.figures.push(figure);
-    const label = makeLabel("You", { color: 0xf5e6c8, size: 8 });
-    const entry = this.labels.add(label, point, { anchorY: 0, offsetY: 10, minZoom: LABEL_ZOOM });
-    this.unitLabels.push(entry);
-    if (this.partyActive) this.drawPartyRing();
+  private removeRecord(record: LocalActorRecord): void {
+    this.objectLayer.removeChild(record.view.container);
+    record.view.destroy();
+    this.labels.remove(record.label);
+    this.actors.delete(record.key);
   }
 
-  private drawPartyRing(): void {
-    if (this.partyRing) {
-      const index = this.unitContainers.indexOf(this.partyRing);
-      if (index >= 0) this.unitContainers.splice(index, 1);
-      this.partyRing.destroy();
-      this.partyRing = null;
+  private clearActors(): void {
+    for (const record of this.actors.values()) this.removeRecord(record);
+    if (this.partyRecord) {
+      this.objectLayer.removeChild(this.partyRecord.view.container);
+      this.partyRecord.view.destroy();
+      this.labels.remove(this.partyRecord.label);
+      this.partyRecord = null;
     }
-    if (!this.partyActive) return;
+    this.actors.clear();
+    this.partyPathKey = "";
+  }
+
+  private presentationFor(record: LocalActorRecord, talking = false): ActorPresentation {
+    return {
+      ...record.presentation,
+      talking,
+      defeated: record.defeated,
+    };
+  }
+
+  private applyPartyPresentation(): void {
+    if (!this.partyRecord) return;
+    this.partyRecord.presentation = {
+      active: this.partyStatus.active ?? this.partyActive,
+      defeated: this.partyStatus.defeated ?? false,
+      conditions: this.partyStatus.conditions ?? [],
+      team: "friendly",
+    };
+    this.partyRecord.defeated = this.partyStatus.defeated ?? false;
+    this.partyRecord.view.setPresentation(this.partyRecord.presentation);
+  }
+
+  private syncParty(hasPath: boolean): void {
     const point = projectHex(this.partyHex, HEX_SIZE, tileHeight(localTileAt(this.map, this.partyHex)));
-    const ring = new Graphics();
-    ring.ellipse(point.x, point.y, 16, 6.5).stroke({ color: 0xe8c987, width: 2.2, alpha: 0.95 });
-    ring.zIndex = point.y - 0.2;
-    this.objectLayer.addChild(ring);
-    this.unitContainers.push(ring);
-    this.partyRing = ring;
+    const appearance = this.partyAppearance ?? {
+      id: "party",
+      name: "You",
+      palette: "gold",
+      seed: "party",
+    };
+    if (!this.partyRecord) {
+      const record = this.createRecord("party", "party", "You", point, "party", appearance);
+      record.presentation = {
+        active: this.partyActive,
+        defeated: this.partyStatus.defeated ?? false,
+        conditions: this.partyStatus.conditions ?? [],
+        team: "friendly",
+      };
+      record.view.setPresentation(record.presentation);
+      this.partyRecord = record;
+    }
+    const record = this.partyRecord;
+    record.target = point;
+    record.hex = this.partyHex;
+    const distance = Math.hypot(record.target.x - record.pixel.x, record.target.y - record.pixel.y);
+    if (distance > 220 && !hasPath) {
+      record.pixel = { ...point };
+      record.path = null;
+    }
+    this.applyPartyPresentation();
+  }
+
+  private syncMarker(marker: LocalNpcMarker): void {
+    const key = this.keyFor(marker.id);
+    const appearanceKey = this.appearanceKeyFor(marker);
+    const existing = this.actors.get(key);
+    if (existing && existing.appearanceKey !== appearanceKey) {
+      this.removeRecord(existing);
+    }
+    const point = projectHex(marker.hex, HEX_SIZE, tileHeight(localTileAt(this.map, marker.hex)));
+    let record = this.actors.get(key);
+    if (!record) {
+      record = this.createRecord(
+        marker.id,
+        marker.kind ?? "npc",
+        marker.name,
+        point,
+        appearanceKey,
+        this.appearanceInputFor(marker),
+      );
+      this.actors.set(key, record);
+    }
+    record.hex = marker.hex;
+    record.target = point;
+    if (Math.hypot(point.x - record.pixel.x, point.y - record.pixel.y) > 190) {
+      record.pixel = { ...point };
+      record.path = null;
+    }
+    const defeated = marker.defeated ?? false;
+    if (marker.hp !== undefined && record.lastHp !== undefined && marker.hp < record.lastHp) {
+      record.view.playCue("hurt", facingToward(record.pixel, this.partyPixel(), record.view.currentFacing));
+    }
+    if (defeated && !record.defeated) {
+      record.view.playCue("death");
+      record.path = null;
+    }
+    record.lastHp = marker.hp;
+    record.defeated = defeated;
+    record.presentation = {
+      active: marker.active ?? false,
+      selected: marker.selected ?? false,
+      conditions: marker.conditions ?? [],
+      hpRatio: marker.hp !== undefined && marker.maxHp ? marker.hp / marker.maxHp : undefined,
+      team: marker.kind === "enemy" ? "enemy" : "friendly",
+      defeated,
+      talking: this.focusNpcId === marker.id,
+    };
+    record.view.setPresentation(record.presentation);
+  }
+
+  private partyPixel(): IsoPoint {
+    if (this.partyRecord) return this.partyRecord.pixel;
+    return projectHex(this.partyHex, HEX_SIZE, tileHeight(localTileAt(this.map, this.partyHex)));
+  }
+
+  private updateActors(deltaMS: number): void {
+    const dt = Math.min(deltaMS, 50) / 1000;
+    const partyPixel = this.partyPixel();
+    for (const record of this.actors.values()) {
+      let target = record.target;
+      if (record.path && record.pathIndex < record.path.length) {
+        target = record.path[record.pathIndex] ?? target;
+      }
+      const dx = target.x - record.pixel.x;
+      const dy = target.y - record.pixel.y;
+      const distance = Math.hypot(dx, dy);
+      let moving = false;
+      let speed = 0;
+      if (distance > 0.55) {
+        const maxStep = (record.kind === "party" ? 215 : 165) * dt;
+        const step = Math.min(distance, maxStep);
+        record.pixel = {
+          x: record.pixel.x + (dx / distance) * step,
+          y: record.pixel.y + (dy / distance) * step,
+        };
+        moving = step > 0.05;
+        speed = dt > 0 ? Math.min(300, (step / dt) * 1000) : 0;
+        if (record.path && distance <= maxStep + 0.6) {
+          record.pathIndex += 1;
+          if (record.pathIndex >= record.path.length) record.path = null;
+        }
+      } else if (record.path) {
+        record.pathIndex += 1;
+        if (record.pathIndex >= record.path.length) record.path = null;
+      }
+
+      if (moving) {
+        record.view.setFacing(facingFromVector(dx, dy, record.view.currentFacing));
+      } else if (record.kind !== "party" && !record.defeated) {
+        const towardPlayer = Math.hypot(partyPixel.x - record.pixel.x, partyPixel.y - record.pixel.y);
+        if (towardPlayer < HEX_SIZE * 3.2) {
+          record.view.setFacing(facingToward(record.pixel, partyPixel, record.view.currentFacing));
+        }
+      }
+      record.view.setMotion(speed, record.view.currentFacing);
+      record.view.setPosition(record.pixel.x, record.pixel.y);
+      record.view.container.zIndex = record.pixel.y;
+      this.labels.setPoint(record.label, record.pixel);
+      record.view.update(deltaMS, this.reduceMotion, this.graphicsQuality);
+    }
+    if (this.partyRecord) {
+      this.labels.setPoint(this.partyRecord.label, this.partyRecord.pixel);
+    }
   }
 
   private drawHover(): void {
@@ -665,25 +1064,57 @@ export class LocalRenderer {
     return hex;
   }
 
-  update(map: LocalMap, partyHex: Hex, npcs: LocalNpcMarker[]): void {
+  update(map: LocalMap, partyHex: Hex, npcs: LocalNpcMarker[], partyPath?: Hex[]): void {
     if (map.id !== this.map.id) {
-      this.clearUnits();
+      this.clearActors();
       this.labels.clear();
+      this.water.clear();
+      this.partyPathKey = "";
       this.map = map;
       this.mapBounds = mapIsoBounds(map, HEX_SIZE, 56);
+      this.weather.setWeather(
+        this.weatherSetting,
+        map.id,
+        this.hour,
+        this.weatherSeed,
+        map.kind === "dungeon",
+      );
       this.buildStatic();
       this.fitToScreen();
     }
     this.partyHex = partyHex;
-    this.clearUnits();
-    for (const npc of npcs) this.drawNpc(npc);
-    this.drawParty();
+    const seen = new Set<string>();
+    for (const npc of npcs) {
+      seen.add(this.keyFor(npc.id));
+      this.syncMarker(npc);
+    }
+    for (const [key, record] of this.actors) {
+      if (!seen.has(key)) this.removeRecord(record);
+    }
+    this.syncParty(Boolean(partyPath && partyPath.length > 0));
+    if (partyPath && partyPath.length > 0 && this.partyRecord) {
+      const pathKey = partyPath.map((hex) => `${hex.q},${hex.r}`).join("|");
+      if (pathKey !== this.partyPathKey) {
+        this.partyPathKey = pathKey;
+        this.partyRecord.path = partyPath.map((hex) =>
+          projectHex(hex, HEX_SIZE, tileHeight(localTileAt(this.map, hex))),
+        );
+        this.partyRecord.pathIndex = 0;
+      }
+    } else if (this.partyPathKey) {
+      this.partyPathKey = "";
+      if (this.partyRecord) {
+        this.partyRecord.path = null;
+        this.partyRecord.pathIndex = 0;
+      }
+    }
     this.drawHover();
     this.labels.update(this.camera);
   }
 
   handleResize(): void {
     this.app.stage.hitArea = new Rectangle(0, 0, this.app.screen.width, this.app.screen.height);
+    this.weather.resize();
     this.labels.update(this.camera);
   }
 
@@ -691,6 +1122,10 @@ export class LocalRenderer {
     this.destroyed = true;
     this.app.ticker.remove(this.tick);
     this.app.canvas.removeEventListener("wheel", this.wheelHandler);
+    this.clearActors();
+    this.water.clear();
+    this.weather.destroy();
+    this.atmosphere.destroy();
     this.labels.destroy();
     this.app.destroy({ removeView: true }, { children: true });
   }

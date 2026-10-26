@@ -98,8 +98,27 @@ export function TravelScreen() {
         id: entity.id,
         name: entity.name,
         palette: entity.appearance?.palette ?? "moss",
+        seed: entity.appearance?.seed,
+        ancestryId: entity.ancestryId,
+        classId: entity.classId,
+        sigil: entity.appearance?.sigil,
+        mainHand: entity.equipment.mainHand,
+        offHand: entity.equipment.offHand,
       }));
   }, [campaign]);
+  const partyAppearance = player
+    ? {
+        id: player.id,
+        name: player.name,
+        palette: player.appearance?.palette ?? "gold",
+        seed: player.appearance?.seed,
+        ancestryId: player.ancestryId,
+        classId: player.classId,
+        sigil: player.appearance?.sigil,
+        mainHand: player.equipment.mainHand,
+        offHand: player.equipment.offHand,
+      }
+    : undefined;
 
   if (!campaign || !travel) return null;
   const map = travel.map;
@@ -209,6 +228,11 @@ export function TravelScreen() {
           paused={sheetOpen || questOpen}
           hour={campaign.clock.hour}
           reduceMotion={settings?.settings.reduceMotion ?? false}
+          weatherSetting={settings?.settings.weather ?? "auto"}
+          graphicsQuality={settings?.settings.graphicsQuality ?? "balanced"}
+          weatherSeed={campaign.world.seed}
+          partyAppearance={partyAppearance}
+          partyFacing={travel.facing}
           onAnchor={handleAnchor}
           onHover={setHoverHex}
           onFacing={handleFacing}

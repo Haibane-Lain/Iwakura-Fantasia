@@ -1078,7 +1078,11 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Dungeon encounters prefer the current local map as the battlefield; road encounters use the current travel map.
 - Encounters use the current field map, preserve terrain/cover/high ground, and remove defeated groups from the field and future regenerations.
 - Procedural villages still reuse the generic settlement interior; handcrafted towns keep their authored interiors.
-- Current field movement is smooth WASD; local town interiors accept WASD step movement or click-to-walk and auto-exit on an exit hex. Manual companion override and patrol schedules remain post-slice.
+- Current field movement is smooth, screen-relative WASD; local town interiors accept camera-relative WASD/QE step movement or click-to-walk and auto-exit on an exit hex. Manual companion override and patrol schedules remain post-slice.
+- Water surfaces use scrolling texture matrices with shoreline foam. Rain, snow, fog, storm flashes, leaves, and dungeon dust are deterministic visual weather derived from the clock and map, not gameplay state.
+- Graphics quality and weather are persisted settings. The high preset adds a camera colour-grade/vignette filter and denser decorative props; low disables decorative clutter and reduces weather/water motion.
+- Actors use runtime vector rigs rather than shipped sprites. Appearance resolves ancestry, class, equipment, NPC role, and enemy tags into humanoid, wolf, or spirit silhouettes. Eight screen directions drive front/side/back poses while the saved travel facing remains six-direction.
+- Travel and local scenes now maintain persistent actor views keyed by ID, so idle, walk/run, talk, alert, attack, cast, guard, hurt, and defeat poses survive React updates. Battle state remains authoritative; hit/death feedback and action cues are visual only.
 
 ---
 

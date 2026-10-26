@@ -247,6 +247,58 @@ export class WorldRenderer {
     }
 
     this.camera.addChild(roads, rivers);
+
+    // Cartographic symbols keep the top-down atlas readable: mountain peaks,
+    // forest clusters, and hill contours are drawn as glyphs rather than
+    // pretending the atlas is a second perspective view.
+    const decor = new Graphics();
+    for (let row = 0; row < this.world.height; row += 1) {
+      for (let col = 0; col < this.world.width; col += 1) {
+        const index = row * this.world.width + col;
+        const terrain = this.world.terrain[index] ?? "ocean";
+        if (terrain === "ocean" || terrain === "coast" || terrain === "lake") continue;
+        const center = hexToPixel(offsetToAxial({ col, row }), HEX_SIZE);
+        const seed = hashString(`${this.world.seed}:decor:${col}:${row}`);
+        if (terrain === "mountains") {
+          const x = center.x;
+          const y = center.y;
+          decor
+            .poly([x - 9, y + 6, x - 1, y - 9, x + 5, y + 6], true)
+            .fill({ color: 0x686762, alpha: 0.86 })
+            .stroke({ color: 0x2b2d29, width: 0.7, alpha: 0.7 });
+          decor
+            .poly([x - 4, y - 3, x - 1, y - 9, x + 2, y - 2, x, y - 4], true)
+            .fill({ color: 0xd8dbd3, alpha: 0.82 });
+          decor
+            .poly([x + 2, y + 7, x + 9, y - 5, x + 13, y + 7], true)
+            .fill({ color: 0x555650, alpha: 0.8 })
+            .stroke({ color: 0x2b2d29, width: 0.7, alpha: 0.65 });
+        } else if (terrain === "forest" && seed % 2 === 0) {
+          const x = center.x + ((seed % 7) - 3) * 1.1;
+          const y = center.y + ((Math.floor(seed / 7) % 5) - 2);
+          for (const [dx, dy, radius] of [
+            [-4, 1, 3.4],
+            [0, -2, 4.1],
+            [4, 1, 3.2],
+          ] as const) {
+            decor
+              .circle(x + dx, y + dy, radius)
+              .fill({ color: 0x2d462b, alpha: 0.82 })
+              .stroke({ color: 0x162317, width: 0.5, alpha: 0.55 });
+          }
+        } else if (terrain === "hills" && seed % 2 === 0) {
+          decor
+            .poly([center.x - 7, center.y + 4, center.x - 1, center.y - 4, center.x + 6, center.y + 4], true)
+            .fill({ color: 0x5e5a4b, alpha: 0.42 })
+            .stroke({ color: 0x2f2e27, width: 0.6, alpha: 0.55 });
+          decor
+            .moveTo(center.x - 10, center.y + 5)
+            .quadraticCurveTo(center.x - 4, center.y - 3, center.x + 5, center.y + 3)
+            .stroke({ color: 0x3a3529, width: 0.8, alpha: 0.28 });
+        }
+      }
+    }
+    this.camera.addChild(decor);
   }
 
   private buildPois(): void {

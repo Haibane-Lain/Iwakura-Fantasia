@@ -158,6 +158,8 @@ export function createApp(options: AppOptions): Hono {
       ...(patch.highContrast !== undefined ? { highContrast: patch.highContrast } : {}),
       ...(patch.showTooltips !== undefined ? { showTooltips: patch.showTooltips } : {}),
       ...(patch.uiScale !== undefined ? { uiScale: patch.uiScale } : {}),
+      ...(patch.graphicsQuality ? { graphicsQuality: patch.graphicsQuality } : {}),
+      ...(patch.weather ? { weather: patch.weather } : {}),
     };
 
     settingsRepo.save(next);

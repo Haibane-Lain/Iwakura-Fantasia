@@ -31,11 +31,13 @@ This runs lint, type checks, Vitest, the Electron E2E flow, and leaves the devel
 | Travel Map | Each world hex generates a deterministic 40×28 field with reachable edge gates, settlement gates, and visible threats |
 | WASD and crossings | Smooth screen-relative movement in Electron; walking through a road edge changes world hex; gates auto-load towns |
 | Seamless travel combat | Visible groups auto-aggro and use the current isometric field map for initiative/cover/companion turns |
+| Weather and graphics | Quality and weather settings persist; rain, snow, fog, water, and dungeon dust render without page errors; reduced motion and low quality remain usable |
+| Actor rigs | Player, NPC, companion, bandit, wolf, and crypt shade visuals resolve from content; eight screen facings, walk/run, combat cues, conditions, and defeat poses render without changing engine timing or saves |
 | Atlas fast travel | Fast travel loads the destination field outside its gate and preserves time/fog/quest progress |
 | Travel save/load | Current field map, enemies, cleared groups, and anchor position persist in the campaign save |
 
 Notes:
 
-- FPS is bounded by batched textured hex meshes and a fixed isometric field renderer; no continuous simulation runs in the renderer.
+- FPS is bounded by batched textured hex meshes, one camera filter pass on non-low quality, quality-scaled weather layers, and procedural actor rigs for the handful of visible units; no continuous simulation runs in the renderer.
 - The AI E2E success path requires a live key and is therefore not part of the default CI run. The live path was verified manually.
 - Save slots are manual snapshots; the active chronicle autosaves.

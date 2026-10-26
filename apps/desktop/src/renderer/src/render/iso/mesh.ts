@@ -135,6 +135,72 @@ export interface RibbonOptions {
   offset?: number;
 }
 
+/**
+ * Add a gently curved ribbon. Roads and rivers are long polylines, so a little
+ * bow between hex centres removes the ruler-straight seams of the first pass.
+ */
+export function addOrganicRibbon(
+  builder: MeshBuilder,
+  from: IsoPoint,
+  to: IsoPoint,
+  options: RibbonOptions & { curve?: number; segments?: number },
+): void {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 0.001) return;
+  const nx = -dy / length;
+  const ny = dx / length;
+  const bow =
+    options.curve ??
+    Math.sin(from.x * 0.012 + to.y * 0.017) * (options.width * 0.26) +
+      Math.cos(to.x * 0.009 - from.y * 0.011) * (options.width * 0.13);
+  const control = {
+    x: (from.x + to.x) / 2 + nx * bow,
+    y: (from.y + to.y) / 2 + ny * bow,
+  };
+  const segments = options.segments ?? 5;
+  const points: Array<{ point: IsoPoint; normal: IsoPoint; distance: number }> = [];
+  let distance = 0;
+  for (let index = 0; index <= segments; index += 1) {
+    const t = index / segments;
+    const inv = 1 - t;
+    const point = {
+      x: inv * inv * from.x + 2 * inv * t * control.x + t * t * to.x,
+      y: inv * inv * from.y + 2 * inv * t * control.y + t * t * to.y,
+    };
+    const tangent = {
+      x: 2 * inv * (control.x - from.x) + 2 * t * (to.x - control.x),
+      y: 2 * inv * (control.y - from.y) + 2 * t * (to.y - control.y),
+    };
+    const tangentLength = Math.hypot(tangent.x, tangent.y) || 1;
+    const normal = { x: -tangent.y / tangentLength, y: tangent.x / tangentLength };
+    if (index > 0) {
+      const previous = points[index - 1]!.point;
+      distance += Math.hypot(point.x - previous.x, point.y - previous.y);
+    }
+    points.push({ point, normal, distance });
+  }
+
+  const repeat = options.repeat ?? Math.max(1, length / 46);
+  const offset = options.offset ?? 0;
+  const half = options.width / 2;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const a = points[index]!;
+    const b = points[index + 1]!;
+    builder.addQuad(
+      { x: a.point.x + a.normal.x * half, y: a.point.y + a.normal.y * half },
+      { x: b.point.x + b.normal.x * half, y: b.point.y + b.normal.y * half },
+      { x: b.point.x - b.normal.x * half, y: b.point.y - b.normal.y * half },
+      { x: a.point.x - a.normal.x * half, y: a.point.y - a.normal.y * half },
+      { u: 0, v: offset + (a.distance / length) * repeat },
+      { u: 0, v: offset + (b.distance / length) * repeat },
+      { u: 1, v: offset + (b.distance / length) * repeat },
+      { u: 1, v: offset + (a.distance / length) * repeat },
+    );
+  }
+}
+
 /** Add a textured ribbon between two projected points. */
 export function addRibbon(builder: MeshBuilder, from: IsoPoint, to: IsoPoint, options: RibbonOptions): void {
   const dx = to.x - from.x;
